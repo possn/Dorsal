@@ -58,13 +58,13 @@ async function carregar(){
   try{
     const hoje=hojeISO();
     const reqs=[api("provas?select=*&data=gte."+hoje+"&order=data.asc,nome.asc")];
-    if(grupo)reqs.push(api("grupos?select=nome,logo&codigo=eq."+grupo),api("membros?select=id,nome&order=nome.asc"),api("presencas?select=membro_id,prova_id,estado,percurso,boleia,lugares,tempo"),api("cliques?select=prova_id"),api("comentarios?select=prova_id,id,membro_id").catch(()=>[]));
+    if(grupo)reqs.push(api("grupos?select=nome,logo&codigo=eq."+grupo),api("membros?select=id,nome&order=nome.asc"),api("presencas?select=membro_id,prova_id,estado,percurso,boleia,lugares,tempo,km,dplus"),api("cliques?select=prova_id"),api("comentarios?select=prova_id,id,membro_id").catch(()=>[]));
     const [ps,gs,ms,pr,cl,co]=await Promise.all(reqs);
     provas=ps||[];
     if(grupo){
       if(!gs||!gs.length){status("Esse código de grupo não existe. Confirma o link que recebeste.");esquecerGrupo(grupo);store.set("dorsal.grupo",null);grupo=null;membros={};pres={};}
       else{grupoNome=gs[0].nome||"";grupoLogo=gs[0].logo||"";lembrarGrupo(grupo,grupoNome);membros={};for(const m of ms||[])membros[m.id]=m.nome;
-        pres={};extra={};for(const x of pr||[]){(pres[x.prova_id]=pres[x.prova_id]||{})[x.membro_id]=x.estado;(extra[x.prova_id]=extra[x.prova_id]||{})[x.membro_id]={percurso:x.percurso||"",boleia:x.boleia||"",lugares:x.lugares||0,tempo:x.tempo||""}}
+        pres={};extra={};for(const x of pr||[]){(pres[x.prova_id]=pres[x.prova_id]||{})[x.membro_id]=x.estado;(extra[x.prova_id]=extra[x.prova_id]||{})[x.membro_id]={percurso:x.percurso||"",boleia:x.boleia||"",lugares:x.lugares||0,tempo:x.tempo||"",km:x.km,dplus:x.dplus}}
         {const ids=new Set(provas.map(p=>p.id)),falta=Object.keys(pres).filter(id=>!ids.has(id));passadas=[];
           if(falta.length){try{passadas=(await api("provas?select=*&order=data.desc&id=in.("+falta.map(i=>'"'+encodeURIComponent(i)+'"').join(",")+")"))||[]}catch(_){}}}
         cliques={};for(const c of cl||[])cliques[c.prova_id]=(cliques[c.prova_id]||0)+1;
@@ -126,7 +126,7 @@ function resumo(){const lim=new Date(hoje().getTime()+42*864e5);const ps=futuras
     return "- "+d.getDate()+" de "+MESES[d.getMonth()]+", "+p.nome+(p.concelho?" ("+p.concelho+")":"")+": "+parts.join("; ")+(valid(p.inscricao)?"\n  "+p.inscricao:"")}).join("\n")}
 
 // ---------- acções ----------
-const exDe=(pid,id)=>(extra[pid]&&extra[pid][id])||{percurso:"",boleia:"",lugares:0,tempo:""};
+const exDe=(pid,id)=>(extra[pid]&&extra[pid][id])||{percurso:"",boleia:"",lugares:0,tempo:"",km:null,dplus:null};
 function normTempo(v){v=String(v||"").trim().replace(/[hH]/,":").replace(/[mM']/,":").replace(/[sS"]/,"").replace(/\s+/g,"");if(!v)return"";const m=v.match(/^(\d{1,3}):(\d{1,2})(?::(\d{1,2}))?$/);if(!m||+m[2]>59||(m[3]&&+m[3]>59))return null;return +m[1]+":"+m[2].padStart(2,"0")+(m[3]!=null?":"+m[3].padStart(2,"0"):"")}
 // ---------- conversa por prova ----------
 function carregarConversa(pid){if(!ONLINE||!grupo)return;conv[pid]=conv[pid]||{estado:"a",lista:[]};
@@ -224,25 +224,65 @@ function calendario(ps,box){const porDia={};for(const p of ps)(porDia[p.data]=po
     h("div",{class:"list"},...lista.map(card)))}
 
 // ---------- o meu ano ----------
-function meuAno(){if(!me||!grupo)return null;const ano=String(new Date().getFullYear()),foi=e=>e==="inscrito"||e==="vou";
-  const feitas=passadas.filter(p=>p.data.startsWith(ano)&&pres[p.id]&&foi(pres[p.id][me]));const prox=futuras().filter(p=>pres[p.id]&&foi(pres[p.id][me]));
-  if(!feitas.length&&!prox.length)return null;
-  const seg=feitas.map(p=>exDe(p.id,me).tempo).filter(Boolean).reduce((a,t)=>{const x=t.split(":").map(Number);return a+(x[0]*3600+x[1]*60+(x[2]||0))},0);
-  const stat=(n,l)=>h("div",{class:"st"},h("b",{text:n}),h("span",{text:l}));
-  return h("div",{class:"meuano"},h("span",{class:"k",text:"O meu "+ano}),h("div",{class:"sts"},stat(String(feitas.length),feitas.length===1?"prova feita":"provas feitas"),stat(String(prox.length),prox.length===1?"próxima":"próximas"),seg?stat(Math.floor(seg/3600)+"h"+String(Math.floor(seg%3600/60)).padStart(2,"0"),"em prova"):null))}
+function segDeTempo(t){if(!t)return 0;const x=t.split(":").map(Number);return x.length===3?x[0]*3600+x[1]*60+x[2]:x[0]*3600+x[1]*60}
+const fmtH=sg=>Math.floor(sg/3600)+"h"+String(Math.floor(sg%3600/60)).padStart(2,"0");
+const fmtN=n=>Number.isInteger(n)?String(n):n.toFixed(1).replace(".",",");
+const foiA=(pid,id)=>{const e=pres[pid]&&pres[pid][id];return e==="inscrito"||e==="vou"};
+function totais(id,ano){const feitas=passadas.filter(p=>p.data.startsWith(ano)&&foiA(p.id,id));let km=0,d=0,sg=0;
+  for(const p of feitas){const x=exDe(p.id,id);km+=+x.km||0;d+=+x.dplus||0;sg+=segDeTempo(x.tempo)}return{n:feitas.length,km,d,sg}}
+function meuAno(){if(!me||!grupo)return null;const ano=String(new Date().getFullYear());const t=totais(me,ano);const prox=futuras().filter(p=>foiA(p.id,me));
+  if(!t.n&&!prox.length)return null;const stat=(n,l)=>h("div",{class:"st"},h("b",{text:n}),h("span",{text:l}));
+  return h("div",{class:"meuano"},h("span",{class:"k",text:"O meu "+ano}),h("div",{class:"sts"},
+    stat(String(t.n),t.n===1?"prova feita":"provas feitas"),t.km?stat(fmtN(Math.round(t.km*10)/10),"km"):null,t.d?stat(t.d>=1000?fmtN(Math.round(t.d/100)/10)+"k":String(t.d),"m D+"):null,t.sg?stat(fmtH(t.sg),"em prova"):null,stat(String(prox.length),prox.length===1?"próxima":"próximas")),
+    !t.km&&t.n?h("p",{class:"hint",text:"Acrescenta os km e o D+ às tuas provas feitas, em baixo, para veres os totais."}):null)}
 
-function historico(){if(!grupo||!passadas.length)return null;const ano=new Date().getFullYear();const foi=(pid,id)=>{const e=pres[pid]&&pres[pid][id];return e==="inscrito"||e==="vou"};
-  const cont={};for(const p of passadas)if(p.data.startsWith(String(ano)))for(const id of Object.keys(pres[p.id]||{}))if(foi(p.id,id))cont[id]=(cont[id]||0)+1;
-  const quadro=Object.entries(cont).sort((a,b)=>b[1]-a[1]||nomeDe(a[0]).localeCompare(nomeDe(b[0]),"pt"));
-  const linha=p=>{const ids=Object.keys(pres[p.id]||{}).filter(id=>foi(p.id,id)).sort((a,b)=>nomeDe(a).localeCompare(nomeDe(b),"pt"));const d=parseD(p.data);
-    let meu=null;if(ids.includes(me)&&podeMarcar()){const inp=h("input",{class:"tempo",inputmode:"numeric",placeholder:"h:mm:ss",value:exDe(p.id,me).tempo,"aria-label":"O teu tempo em "+p.nome});
-      meu=h("form",{class:"tempoform",onsubmit:e=>{e.preventDefault();const t=normTempo(inp.value);if(t===null){toast("Escreve o tempo como 4:35:12");return}setExtra(p.id,{tempo:t}).then(ok=>{if(ok)toast(t?"Tempo guardado":"Tempo apagado")})}},h("span",{class:"hint",text:"O teu tempo"}),inp,h("button",{class:"btn small",type:"submit",text:"Guardar"}))}
+let regAberto=false,quadroPor="provas",editHist=null,regDraft={};
+const PERCURSOS=["Caminhada","Trail curto","Trail longo","Trail ultra","Skyrunning","Backyard","Estrada","Outro"];
+function registoForm(){const v=id=>$(id)?$(id).value:"";
+  const f=h("form",{class:"form registo",onsubmit:async e=>{e.preventDefault();const nome=$("rNome").value.trim(),data=$("rData").value;if(!nome||!data)return;
+      if(data>hojeISO()){toast("Para provas futuras usa Nova prova.");return}
+      const t=normTempo($("rTempo").value);if(t===null){toast("Escreve o tempo como 4:35:12");return}
+      const km=$("rKm").value?+String($("rKm").value).replace(",","."):null,dp=$("rD").value?parseInt($("rD").value,10):null;
+      if(km!=null&&!(km>=0&&km<=400)){toast("Km entre 0 e 400.");return}
+      const b=f.querySelector("button[type=submit]");b.disabled=true;
+      let id=(nome.normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,60)||"prova")+"-"+data;
+      const body={id,nome:nome.slice(0,120),data,distrito:$("rDist").value,concelho:$("rConc").value.trim().slice(0,80),distancias:$("rPerc").value,fonte:"registo",grupo,criado_por:me};
+      try{try{await api("provas",{method:"POST",prefer:"return=minimal",body})}catch(err){if(err.status!==409)throw err;
+          const existe=passadas.find(x=>x.id===id);if(!existe){id=id.slice(0,70)+"-"+Math.random().toString(36).slice(2,6);body.id=id;await api("provas",{method:"POST",prefer:"return=minimal",body})}}
+        await api("presencas?on_conflict=membro_id,prova_id",{method:"POST",prefer:"resolution=merge-duplicates,return=minimal",body:{grupo,membro_id:me,prova_id:id,estado:"inscrito",percurso:$("rPerc").value,km,dplus:dp,tempo:t||"",atualizado:new Date().toISOString()}});
+        regAberto=false;regDraft={};toast("Prova registada");await carregar()}
+      catch(err){toast("Não foi possível registar. Tenta outra vez.")}finally{b.disabled=false}}},
+    h("label",{class:"full",for:"rNome"},"Nome da prova",h("input",{id:"rNome",required:true,maxlength:"120"})),
+    h("label",{for:"rData"},"Data",h("input",{id:"rData",type:"date",required:true,max:hojeISO()})),
+    h("label",{for:"rPerc"},"Percurso",h("select",{id:"rPerc"},...PERCURSOS.map(x=>h("option",{value:x,text:x})))),
+    h("label",{for:"rDist"},"Distrito",h("select",{id:"rDist"},h("option",{value:"",text:"—"}),...DISTRITOS.map(d=>h("option",{value:d,text:d})))),
+    h("label",{for:"rConc"},"Concelho ou terra",h("input",{id:"rConc",maxlength:"80"})),
+    h("label",{for:"rKm"},"Km",h("input",{id:"rKm",inputmode:"decimal",placeholder:"25"})),
+    h("label",{for:"rD"},"D+ (m)",h("input",{id:"rD",inputmode:"numeric",placeholder:"1200"})),
+    h("label",{class:"full",for:"rTempo"},"Tempo (opcional)",h("input",{id:"rTempo",inputmode:"numeric",placeholder:"3:45:10"})),
+    h("div",{class:"full row"},h("button",{class:"btn primary",type:"submit",text:"Registar"}),h("button",{class:"btn",type:"button",onclick:()=>{regAberto=false;draw()},text:"Cancelar"})));
+  f.querySelector("#rPerc").value="Trail curto";
+  for(const k in regDraft){const el=f.querySelector("#"+k);if(el)el.value=regDraft[k]}
+  f.addEventListener("input",e=>{if(e.target.id)regDraft[e.target.id]=e.target.value});f.addEventListener("change",e=>{if(e.target.id)regDraft[e.target.id]=e.target.value});return f}
+function historico(){if(!grupo||!me)return null;const ano=String(new Date().getFullYear());
+  const ids=new Set();for(const p of passadas)if(p.data.startsWith(ano))for(const id of Object.keys(pres[p.id]||{}))if(foiA(p.id,id))ids.add(id);
+  const quadro=[...ids].map(id=>[id,totais(id,ano)]).sort((a,b)=>quadroPor==="km"?(b[1].km-a[1].km||b[1].n-a[1].n):(b[1].n-a[1].n||b[1].km-a[1].km)||nomeDe(a[0]).localeCompare(nomeDe(b[0]),"pt"));
+  const linha=p=>{const quem=Object.keys(pres[p.id]||{}).filter(id=>foiA(p.id,id)).sort((a,b)=>nomeDe(a).localeCompare(nomeDe(b),"pt"));const d=parseD(p.data);
+    let meu=null;if(quem.includes(me)&&podeMarcar()){const x=exDe(p.id,me);
+      if(editHist===p.id){const iK=h("input",{inputmode:"decimal",placeholder:"km",value:x.km!=null?String(x.km).replace(".",","):"","aria-label":"Km"}),iD=h("input",{inputmode:"numeric",placeholder:"D+ m",value:x.dplus!=null?String(x.dplus):"","aria-label":"Desnível positivo"}),iT=h("input",{inputmode:"numeric",placeholder:"h:mm:ss",value:x.tempo,"aria-label":"Tempo"});
+        meu=h("form",{class:"tempoform",onsubmit:e=>{e.preventDefault();const t=normTempo(iT.value);if(t===null){toast("Escreve o tempo como 4:35:12");return}
+          const km=iK.value.trim()?+iK.value.replace(",","."):null,dp=iD.value.trim()?parseInt(iD.value,10):null;if(km!=null&&!(km>=0&&km<=400)){toast("Km entre 0 e 400.");return}if(dp!=null&&!(dp>=0&&dp<=20000)){toast("D+ entre 0 e 20000 m.");return}
+          setExtra(p.id,{km,dplus:dp,tempo:t}).then(ok=>{if(ok){editHist=null;toast("Guardado");draw()}})}},iK,iD,iT,h("button",{class:"btn small primary",type:"submit",text:"Guardar"}))}
+      else meu=h("button",{class:"linkbtn",type:"button",onclick:()=>{editHist=p.id;draw()},text:(x.km||x.tempo)?"Editar os meus dados":"Acrescentar km, D+ e tempo"})}
     return h("li",{class:"hist"},h("div",{class:"hist-top"},h("span",{class:"hd",text:d.getDate()+" "+MESES[d.getMonth()].slice(0,3)+" "+d.getFullYear()}),h("button",{class:"titlebtn",onclick:()=>abrir(p.id),text:p.nome})),
-      h("div",{class:"people"},...ids.map(id=>{const x=exDe(p.id,id);return h("span",{class:"p inscrito",text:nomeDe(id)+(x.percurso?" · "+x.percurso:"")+(x.tempo?" · "+x.tempo:"")})})),meu)};
-  return h("section",{class:"historico"},h("h2",{class:"month",text:"Provas feitas"}),
-    quadro.length?h("div",{class:"quadro"},h("strong",{text:"Quadro de "+ano}),h("ol",null,...quadro.map(([id,n],i)=>h("li",{class:id===me?"eu":null},h("span",{class:"pos",text:String(i+1)}),h("span",{class:"qn",text:nomeDe(id)}),h("span",{class:"qc",text:n+(n===1?" prova":" provas")}))))):null,
-    h("ul",{class:"histlista"},...passadas.slice(0,histTodas?999:5).map(linha)),
-    passadas.length>5?h("button",{class:"linkbtn",onclick:()=>{histTodas=!histTodas;draw()},text:histTodas?"Mostrar menos":"Ver todas ("+passadas.length+")"}):null)}
+      quem.length?h("div",{class:"people"},...quem.map(id=>{const x=exDe(p.id,id);return h("span",{class:"p inscrito",text:nomeDe(id)+(x.percurso?" · "+x.percurso:"")+(x.km?" · "+fmtN(+x.km)+" km":"")+(x.tempo?" · "+x.tempo:"")})})):null,meu)};
+  const lista=passadas.filter(p=>Object.keys(pres[p.id]||{}).some(id=>foiA(p.id,id)));
+  return h("section",{class:"historico"},h("div",{class:"row between"},h("h2",{class:"month",text:"Provas feitas"}),regAberto?null:h("button",{class:"btn small",type:"button",onclick:()=>{regAberto=true;draw();setTimeout(()=>$("rNome")&&$("rNome").focus(),50)},text:"+ Registar prova feita"})),
+    regAberto?registoForm():null,
+    quadro.length?h("div",{class:"quadro"},h("div",{class:"row between"},h("strong",{text:"Quadro de "+ano}),h("div",{class:"seg"},...[["provas","Provas"],["km","Km"]].map(([k,l])=>h("button",{type:"button","aria-pressed":String(quadroPor===k),onclick:()=>{quadroPor=k;draw()},text:l})))),
+      h("ol",null,...quadro.map(([id,t],i)=>h("li",{class:id===me?"eu":null},h("span",{class:"pos",text:String(i+1)}),h("span",{class:"qn",text:nomeDe(id)}),h("span",{class:"qc",text:quadroPor==="km"?fmtN(Math.round(t.km*10)/10)+" km · "+t.n+(t.n===1?" prova":" provas"):t.n+(t.n===1?" prova":" provas")+(t.km?" · "+fmtN(Math.round(t.km*10)/10)+" km":"")}))))):null,
+    lista.length?h("ul",{class:"histlista"},...lista.slice(0,histTodas?999:5).map(linha)):(regAberto?null:h("p",{class:"hint",text:"Ainda não há provas feitas registadas. Regista as que fizeste este ano para teres os teus totais de km e D+."})),
+    lista.length>5?h("button",{class:"linkbtn",onclick:()=>{histTodas=!histTodas;draw()},text:histTodas?"Mostrar menos":"Ver todas ("+lista.length+")"}):null)}
 async function setExtra(pid,campos){if(!podeMarcar()||!(pres[pid]&&pres[pid][me]))return;const m=extra[pid]=extra[pid]||{};const antes=Object.assign({},exDe(pid,me));m[me]=Object.assign({},antes,campos);draw();
   try{await api("presencas?membro_id=eq."+me+"&prova_id=eq."+encodeURIComponent(pid),{method:"PATCH",prefer:"return=minimal",body:campos});return true}catch(err){m[me]=antes;draw();toast("Não foi possível guardar. Tenta outra vez.");return false}}
 function icsDe(p){const d=p.data.replace(/-/g,""),d2=(()=>{const x=parseD(p.data);x.setDate(x.getDate()+1);return x.getFullYear()+String(x.getMonth()+1).padStart(2,"0")+String(x.getDate()).padStart(2,"0")})();

@@ -293,4 +293,14 @@ table.pt tr.prova td{background:var(--orange-soft);font-weight:600}
 .novasbox{border-left-color:var(--green);align-items:flex-start}
 .linkbtn.com.nova{color:var(--accent);font-weight:700}
 .bottomnav .tab.temnovas::after{content:"";position:absolute;top:4px;left:calc(50% - 16px);width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 0 2px var(--surface)}
+.registo{margin-bottom:10px}
+.hist > .linkbtn{align-self:flex-start}
+.historico .row.between{align-items:center}
+.historico .row.between h2{margin-bottom:8px}
+.quadro .seg button{padding:3px 10px;font-size:.8rem}
+.quadro .seg button[aria-pressed="true"]{background:var(--fg);color:var(--bg)}
+.tempoform{flex-wrap:wrap}
+.tempoform input{width:84px;flex:1 1 70px;min-width:0}
+.meuano .hint{margin:6px 0 0}
+.sts{flex-wrap:wrap;gap:12px 18px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:6px;font-weight:600;z-index:10}

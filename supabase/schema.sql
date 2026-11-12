@@ -177,3 +177,6 @@ grant select (endpoint, grupo, membro_id) on public.subscricoes to anon;
 grant insert, update, delete on public.subscricoes to anon;
 alter table public.comentarios add column if not exists notificado boolean not null default false;
 revoke update on public.comentarios from anon;
+
+alter table public.presencas add column if not exists km numeric(5,1) check (km is null or (km >= 0 and km <= 400));
+alter table public.presencas add column if not exists dplus integer check (dplus is null or (dplus >= 0 and dplus <= 20000));
