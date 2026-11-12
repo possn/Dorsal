@@ -377,3 +377,10 @@ table.pt tr.prova td{background:var(--orange-soft);font-weight:600}
 .privacoes label{display:flex;flex-direction:column;gap:4px;margin:6px 0 10px;font-weight:600}
 .calc.perigo{border-color:#e3b4ae}
 .privacoes .btn.danger{margin-left:0}
+.adminbox{margin-top:16px;border-top:1px solid var(--line);padding-top:6px}
+.adminbox h3{margin:6px 0 4px}
+.adminacts{display:grid;gap:14px;margin-top:8px}
+.adminacts p{margin:2px 0 6px}
+.adminacts .btn.danger{margin-left:0}
+label.btn.off{opacity:.45;pointer-events:none}
+.admrem{margin-top:16px}.admrem .btn.danger{margin-left:0}

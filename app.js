@@ -27,8 +27,14 @@ let tab=store.get("dorsal.tab")||"grupo",openMsg=null,confirmDel=null;
 
 // ---------- código do grupo ----------
 function lerCodigo(txt){const t=String(txt||"").trim();const m=t.match(/[?&#]g=([a-z0-9]{6,40})/i);if(m)return m[1].toLowerCase();if(/^[a-z0-9]{6,40}$/i.test(t))return t.toLowerCase();return null}
-(function(){const c=lerCodigo(location.search)||lerCodigo(location.hash);if(c){store.set("dorsal.grupo",c);try{history.replaceState(history.state,"",location.pathname+location.hash)}catch(_){}}grupo=store.get("dorsal.grupo")})();
+(function(){const c=lerCodigo(location.search)||lerCodigo(location.hash);const ad=location.hash.match(/[#&]admin=([0-9a-f]{20,80})/i);
+  if(c){store.set("dorsal.grupo",c);if(ad)store.set("dorsal.admin."+c,ad[1].toLowerCase());try{history.replaceState(history.state,"",location.pathname+(ad?"":location.hash))}catch(_){}}
+  grupo=store.get("dorsal.grupo");if(ad&&c)setTimeout(()=>{verAdmin().then(()=>toast(souAdmin()?"Passaste a administrar este grupo":"Este link de administração já não é válido"))},1500)})();
 let entrarAberto=false;
+let adminEstado=null;
+const chaveAdmin=()=>"dorsal.admin."+grupo,adminTok=()=>store.get(chaveAdmin());
+async function verAdmin(){if(!grupo){adminEstado=null;return}try{adminEstado=await api("rpc/admin_estado",{method:"POST",body:{p_token:adminTok()||""}})}catch(_){adminEstado=null}}
+const souAdmin=()=>adminEstado==="admin";
 function gruposConhecidos(){try{return JSON.parse(store.get("dorsal.grupos")||"[]")}catch(_){return[]}}
 function lembrarGrupo(c,n){const l=gruposConhecidos().filter(x=>x.c!==c);l.unshift({c,n:n||""});store.set("dorsal.grupos",JSON.stringify(l.slice(0,20)))}
 function esquecerGrupo(c){store.set("dorsal.grupos",JSON.stringify(gruposConhecidos().filter(x=>x.c!==c)))}
@@ -59,7 +65,7 @@ async function carregar(){
     const hoje=hojeISO();
     const reqs=[api("provas?select=*&data=gte."+hoje+"&order=data.asc,nome.asc")];
     if(grupo)reqs.push(api("grupos?select=nome,logo&codigo=eq."+grupo),api("membros?select=id,nome&order=nome.asc"),api("presencas?select=membro_id,prova_id,estado,percurso,boleia,lugares,tempo,km,dplus"),api("cliques?select=prova_id"),api("comentarios?select=prova_id,id,membro_id").catch(()=>[]),api("trilhos?select=prova_id,membro_id").catch(()=>[]));
-    const [ps,gs,ms,pr,cl,co,tr]=await Promise.all(reqs);if(tr){temTrilho=new Set(tr.map(x=>x.prova_id+"|"+x.membro_id))}
+    const [ps,gs,ms,pr,cl,co,tr]=await Promise.all(reqs);if(grupo)verAdmin().then(()=>{if(!$("editarGrupo").hidden)painelAdmin()});if(tr){temTrilho=new Set(tr.map(x=>x.prova_id+"|"+x.membro_id))}
     provas=ps||[];
     if(grupo){
       if(!gs||!gs.length){status("Esse código de grupo não existe. Confirma o link que recebeste.");esquecerGrupo(grupo);store.set("dorsal.grupo",null);grupo=null;membros={};pres={};}
@@ -375,6 +381,9 @@ function perfil(id){const box=h("article",{class:"sec est perfil"});
   box.append(h("h2",{text:"Provas feitas"}),feitas.length?h("ul",{class:"plist"},...feitas.map(p=>{const x=exDe(p.id,id),sg=segDeTempo(x.tempo);
     const li=linhaProva(p,[x.percurso,x.km?fmtKm(+x.km)+" km":"",x.dplus?x.dplus+" m D+":"",x.tempo||"",(sg&&+x.km>=1)?ritmo(sg/ +x.km,1):"",temTrilho.has(p.id+"|"+id)?"📍 GPX":""]);li.append(h("button",{class:"linkbtn",type:"button",onclick:()=>partilharResultado(p,id),text:"↗ Imagem do resultado"}));return li})):h("p",{class:"hint",text:id===me?"Regista as provas que fizeste no separador do grupo, em Provas feitas.":"Ainda não registou provas feitas."}));
   if(t.n){const M=["J","F","M","A","M","J","J","A","S","O","N","D"];box.append(h("h2",{text:"Km por mês em "+ano}),barrasSVG(t.meses,M,"km","#ee5a0f"))}
+  if(souAdmin()&&id!==me){box.append(h("div",{class:"calc perigo admrem"},h("strong",{text:"Administração"}),h("p",{class:"hint",text:"Remover "+nome+" apaga as marcações, resultados, mensagens e trilhos dessa pessoa neste grupo. Não se pode desfazer. Se continuar a ter o link, pode voltar a juntar-se; muda o código para o impedir."}),
+    h("button",{class:"btn danger",type:"button",onclick:async ev=>{const b=ev.currentTarget;if(b.dataset.conf!=="1"){b.dataset.conf="1";b.textContent="Confirmar: remover "+nome;return}
+      try{const ok=await api("rpc/admin_remover",{method:"POST",body:{p_token:adminTok(),p_id:id}});if(!ok)throw 0;toast(nome+" foi removido");location.hash="s=membros";await carregar()}catch(_){toast("Não foi possível remover. Tenta outra vez.")}},text:"Remover do grupo"})))}
   const ganhas=CONQ.filter(([, ,f])=>f(tudo));
   box.append(h("h2",{text:"Conquistas ("+ganhas.length+"/"+CONQ.length+")"}),h("ul",{class:"conquistas"},...CONQ.map(([n,d,f])=>{const ok=f(tudo);return h("li",{class:ok?"ok":null},h("span",{class:"med","aria-hidden":"true",text:ok?"★":"☆"}),h("span",null,h("strong",{text:n}),h("small",{text:d})))})));
   return box}
@@ -776,7 +785,7 @@ $("pushBtn").addEventListener("click",()=>{if(pushAtivo())desactivarPush();else{
 $("entrarX").addEventListener("click",()=>{entrarAberto=false;draw()});
 $("criarForm").addEventListener("submit",async e=>{e.preventDefault();const nome=$("criarNome").value.trim().slice(0,40);if(!nome){$("criarMsg").textContent="Escreve o nome do grupo.";return}
   const b=$("criarForm").querySelector("button");b.disabled=true;$("criarMsg").textContent="A criar…";
-  try{const c=await api("rpc/criar_grupo",{method:"POST",body:{p_nome:nome}});if(typeof c!=="string"||!/^[a-z0-9]{6,40}$/.test(c))throw 0;
+  try{const r=await api("rpc/criar_grupo2",{method:"POST",body:{p_nome:nome}});const c=r&&r.codigo;if(typeof c!=="string"||!/^[a-z0-9]{6,40}$/.test(c))throw 0;store.set("dorsal.admin."+c,r.admin);
     $("criarNome").value="";$("criarMsg").textContent="";lembrarGrupo(c,nome);mudarGrupo(c);toast("Grupo criado. Junta-te com o teu nome e depois convida os outros.")}
   catch(err){$("criarMsg").textContent=err&&err.status===400?"Demasiados grupos criados há pouco. Tenta mais tarde.":"Não foi possível criar o grupo. Tenta outra vez."}
   finally{b.disabled=false}});
@@ -790,12 +799,38 @@ let novoLogo=null;
 function reduzirImagem(file){return new Promise((res,rej)=>{const img=new Image(),url=URL.createObjectURL(file);img.onload=()=>{const S=128,c=document.createElement("canvas");c.width=c.height=S;const x=c.getContext("2d");
   const lado=Math.min(img.width,img.height);x.drawImage(img,(img.width-lado)/2,(img.height-lado)/2,lado,lado,0,0,S,S);URL.revokeObjectURL(url);
   let d=c.toDataURL("image/webp",.8);if(!d.startsWith("data:image/webp"))d=c.toDataURL("image/jpeg",.82);res(d)};img.onerror=rej;img.src=url})}
-$("editarBtn").addEventListener("click",()=>{const p=$("editarGrupo");p.hidden=!p.hidden;if(!p.hidden){$("gNome").value=grupoNome;novoLogo=null;$("gPrev").src=grupoLogo||"icons/dorsal-v2.svg";$("gMsg").textContent="";p.scrollIntoView({behavior:"smooth",block:"center"})}});
+$("editarBtn").addEventListener("click",()=>{const p=$("editarGrupo");p.hidden=!p.hidden;if(!p.hidden){$("gNome").value=grupoNome;novoLogo=null;$("gPrev").src=grupoLogo||"icons/dorsal-v2.svg";$("gMsg").textContent="";painelAdmin();verAdmin().then(painelAdmin);p.scrollIntoView({behavior:"smooth",block:"center"})}});
+let confAdmin="";
+function painelAdmin(){const box=$("adminBox");if(!box)return;const e=adminEstado,bloq=e==="outro";
+  $("gForm").querySelectorAll("input,button,label.btn").forEach(x=>{if(x.tagName==="LABEL")x.classList.toggle("off",bloq);else x.disabled=bloq});
+  if(!e){box.replaceChildren();return}
+  if(e==="livre"){box.replaceChildren(h("h3",{text:"Administração"}),h("p",{class:"hint",text:"Ninguém administra este grupo. Quem administra pode mudar o nome e o logótipo, remover membros e mudar o código se o link circular onde não deve."}),
+    h("button",{class:"btn primary",type:"button",onclick:async()=>{try{const t=await api("rpc/admin_reclamar",{method:"POST",body:{}});if(!t)throw 0;store.set(chaveAdmin(),t);await verAdmin();painelAdmin();toast("Passaste a administrar o grupo")}catch(_){toast("Não foi possível. Outra pessoa pode já ter ficado com a administração.");verAdmin().then(painelAdmin)}},text:"Ficar como administrador"}));return}
+  if(e==="outro"){box.replaceChildren(h("h3",{text:"Administração"}),h("p",{class:"hint",text:"Este grupo tem administrador. Só ele muda o nome, o logótipo e o código, ou remove membros. Se precisares, pede-lhe o link de administração."}));return}
+  const linkAdmin=()=>location.origin+location.pathname+"?g="+grupo+"#admin="+adminTok();
+  box.replaceChildren(h("h3",{text:"Administração ✓"}),h("p",{class:"hint",text:"Administras este grupo neste telemóvel. Removes membros na página de cada um (menu, Membros)."}),
+    h("div",{class:"adminacts"},
+      h("div",null,h("strong",{text:"Partilhar a administração"}),h("p",{class:"hint",text:"Quem abrir este link fica também administrador. Usa-o para passar a gestão a outra pessoa ou para administrares noutro telemóvel."}),
+        h("button",{class:"btn small",type:"button",onclick:()=>copiar(linkAdmin()),text:"Copiar link de administração"})),
+      h("div",null,h("strong",{text:"Retirar a administração aos outros"}),h("p",{class:"hint",text:"Cria um link de administração novo. Os links antigos deixam de servir; só este telemóvel continua a administrar."}),
+        h("button",{class:"btn small",type:"button",onclick:async()=>{if(confAdmin!=="token"){confAdmin="token";painelAdmin();return}confAdmin="";try{const t=await api("rpc/admin_novo_token",{method:"POST",body:{p_token:adminTok()}});if(!t)throw 0;store.set(chaveAdmin(),t);toast("Só tu administras agora")}catch(_){toast("Não foi possível. Tenta outra vez.")}painelAdmin()},text:confAdmin==="token"?"Confirmar":"Retirar"})),
+      h("div",null,h("strong",{text:"Mudar o código do grupo"}),h("p",{class:"hint",text:"Para quando o link circulou onde não devia. O link antigo deixa de funcionar e tens de enviar o novo a todos os membros. Nada se perde."}),
+        h("button",{class:"btn small danger",type:"button",onclick:mudarCodigo,text:confAdmin==="codigo"?"Confirmar: mudar o código":"Mudar o código"}))))}
+async function mudarCodigo(){if(confAdmin!=="codigo"){confAdmin="codigo";painelAdmin();return}confAdmin="";
+  try{const novo=await api("rpc/admin_novo_codigo",{method:"POST",body:{p_token:adminTok()}});if(typeof novo!=="string"||!/^[a-z0-9]{6,40}$/.test(novo))throw 0;
+    const velho=grupo;for(const k of ["dorsal.membro.","dorsal.admin.","dorsal.pushdispensa."]){const v=store.get(k+velho);if(v!=null){store.set(k+novo,v);store.set(k+velho,null)}}
+    const ep=store.get("dorsal.push."+velho);if(ep!=null){store.set("dorsal.push."+novo,ep);store.set("dorsal.push."+velho,null)}
+    store.set("dorsal.cache."+velho,null);const n=grupoNome;esquecerGrupo(velho);lembrarGrupo(novo,n);
+    history.replaceState(null,"",location.pathname+"?g="+novo);$("editarGrupo").hidden=true;mudarGrupo(novo);
+    toast("Código mudado. Envia o link novo a todos os membros.");setTimeout(()=>{const b=$("partilhar");if(b&&!b.hidden)b.click()},900)}
+  catch(_){toast("Não foi possível mudar o código. Tenta outra vez.");painelAdmin()}}
 $("gFicheiro").addEventListener("change",async e=>{const f=e.target.files[0];if(!f)return;try{novoLogo=await reduzirImagem(f);$("gPrev").src=novoLogo}catch(_){$("gMsg").textContent="Não consegui ler essa imagem."}});
 $("gTirar").addEventListener("click",()=>{novoLogo="";$("gPrev").src="icons/dorsal-v2.svg"});
 $("gForm").addEventListener("submit",async e=>{e.preventDefault();if(!podeMarcar())return;const nome=$("gNome").value.trim().slice(0,40);if(!nome){$("gMsg").textContent="O grupo precisa de um nome.";return}
   const body={nome};if(novoLogo!==null)body.logo=novoLogo;
-  try{await api("grupos?codigo=eq."+grupo,{method:"PATCH",prefer:"return=minimal",body});grupoNome=nome;if(novoLogo!==null)grupoLogo=novoLogo;$("editarGrupo").hidden=true;draw();toast("Grupo actualizado")}
+  if(adminEstado==="outro"){$("gMsg").textContent="Só o administrador pode mudar o nome e o logótipo.";return}
+  try{if(souAdmin()){const ok=await api("rpc/admin_editar",{method:"POST",body:{p_token:adminTok(),p_nome:nome,p_logo:novoLogo!==null?novoLogo:(grupoLogo||"")}});if(!ok)throw 0}
+    else await api("grupos?codigo=eq."+grupo,{method:"PATCH",prefer:"return=minimal",body});lembrarGrupo(grupo,nome);grupoNome=nome;if(novoLogo!==null)grupoLogo=novoLogo;$("editarGrupo").hidden=true;draw();toast("Grupo actualizado")}
   catch(err){$("gMsg").textContent="Não foi possível guardar. Tenta outra vez."}});
 $("sair").addEventListener("click",()=>{me=null;store.set(chaveMe(),null);draw();window.scrollTo({top:0})});
 const linkGrupo=()=>location.origin+location.pathname+"?g="+grupo,textoConvite=()=>"Junta-te"+(grupoNome?" aos "+grupoNome:" ao grupo")+" no Dorsal para combinarmos as provas de trail: "+linkGrupo();

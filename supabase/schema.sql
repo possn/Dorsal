@@ -245,3 +245,11 @@ begin
 end $$;
 revoke all on function public.apagar_membro(uuid) from public;
 grant execute on function public.apagar_membro(uuid) to anon, authenticated;
+
+-- ---------- administração do grupo ----------
+-- Cada grupo pode ter um código de administração (só se guarda o hash SHA-256). Quem o tem pode
+-- mudar nome/logótipo, remover membros, renovar o código de administração e mudar o código do grupo.
+-- Ver a migração "admin_grupo" no Supabase: funções admin_estado, admin_reclamar, criar_grupo2,
+-- admin_editar, admin_remover, admin_novo_token e admin_novo_codigo (todas SECURITY DEFINER).
+-- A coluna admin_hash não é legível pelo anon (grant de select só em codigo, nome, logo, criado_em),
+-- e a política grupos_alterar só deixa editar directamente grupos sem administrador.
