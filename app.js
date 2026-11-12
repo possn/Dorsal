@@ -15,7 +15,7 @@ const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},se
 let grupo=null,grupoNome="",grupoLogo="",me=null;
 let extra={},meteo={},passadas=[],nCom={},conv={};
 let provas=[],membros={},pres={},cliques={},loaded=false;
-let histTodas=false;
+let histTodas=false,vistaCal=store.get("dorsal.vista")==="cal",calMes=null,calDia=null;
 let filtroReg=store.get("dorsal.regiao")||"",filtroDist=store.get("dorsal.distrito")||"";
 let casa=null;try{casa=JSON.parse(store.get("dorsal.casa")||"null")}catch(_){}
 let filtroRaio=+(store.get("dorsal.raio")||0);let filtroTipos=new Set((store.get("dorsal.tipos")||"").split("|").filter(Boolean));
@@ -170,6 +170,32 @@ function planoView(p){if(!podeMarcar()||!(pres[p.id]&&pres[p.id][me]))return nul
     h("p",{class:"hint"},"Exemplo genérico, sem conhecer o teu histórico nem lesões: a corrida longa sobe cerca de 10% por semana, alivia a cada 4.ª semana e baixa nas duas últimas. Fundamentos e fontes em ",h("a",{href:"#s=preparacao",text:"Preparação física"}),"."));
   if(planoAberto[p.id])det.open=true;det.addEventListener("toggle",()=>{planoAberto[p.id]=det.open});return det}
 
+// ---------- calendário mensal ----------
+function calendario(ps,box){const porDia={};for(const p of ps)(porDia[p.data]=porDia[p.data]||[]).push(p);
+  if(!calMes){const fm=$("fMes").value;calMes=fm||(ps[0]?ps[0].data.slice(0,7):hojeISO().slice(0,7))}
+  const [y,m]=calMes.split("-").map(Number),prim=new Date(y,m-1,1),nDias=new Date(y,m,0).getDate(),off=(prim.getDay()+6)%7,hj=hojeISO();
+  const mover=d=>{const x=new Date(y,m-1+d,1);calMes=x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0");calDia=null;draw()};
+  const cel=[];for(let i=0;i<off;i++)cel.push(h("div",{class:"cal-d vazio"}));
+  for(let d=1;d<=nDias;d++){const iso=calMes+"-"+String(d).padStart(2,"0"),l=porDia[iso]||[],grp=l.some(p=>temGente(p.id)),meu=me&&l.some(p=>pres[p.id]&&pres[p.id][me]);
+    cel.push(h("button",{type:"button",class:"cal-d"+(l.length?" tem":"")+(grp?" grp":"")+(meu?" meu":"")+(iso===hj?" hoje":"")+(iso===calDia?" sel":""),disabled:l.length?null:true,"aria-label":d+" de "+MESES[m-1]+(l.length?": "+l.length+(l.length===1?" prova":" provas"):""),onclick:()=>{calDia=calDia===iso?null:iso;draw()}},
+      h("span",{class:"n",text:String(d)}),l.length?h("span",{class:"pts",text:"•".repeat(Math.min(l.length,3))}):null))}
+  const doMes=ps.filter(p=>p.data.startsWith(calMes)),lista=calDia?(porDia[calDia]||[]):doMes;
+  box.replaceChildren(h("div",{class:"cal"},
+    h("div",{class:"cal-head"},h("button",{type:"button",class:"btn small","aria-label":"Mês anterior",onclick:()=>mover(-1),text:"‹"}),h("strong",{text:MESES[m-1]+" "+y}),h("button",{type:"button",class:"btn small","aria-label":"Mês seguinte",onclick:()=>mover(1),text:"›"})),
+    h("div",{class:"cal-sem"},...["seg","ter","qua","qui","sex","sáb","dom"].map(x=>h("span",{text:x}))),
+    h("div",{class:"cal-grid"},...cel),
+    h("p",{class:"hint cal-leg"},h("span",{class:"lg tem"}),"com provas ",h("span",{class:"lg grp"}),"o grupo vai ",h("span",{class:"lg meu"}),"tu vais")),
+    h("h2",{class:"month",text:calDia?dataLonga(calDia):(doMes.length?doMes.length+(doMes.length===1?" prova em ":" provas em ")+MESES[m-1]:"Sem provas em "+MESES[m-1]+" com estes filtros")}),
+    h("div",{class:"list"},...lista.map(card)))}
+
+// ---------- o meu ano ----------
+function meuAno(){if(!me||!grupo)return null;const ano=String(new Date().getFullYear()),foi=e=>e==="inscrito"||e==="vou";
+  const feitas=passadas.filter(p=>p.data.startsWith(ano)&&pres[p.id]&&foi(pres[p.id][me]));const prox=futuras().filter(p=>pres[p.id]&&foi(pres[p.id][me]));
+  if(!feitas.length&&!prox.length)return null;
+  const seg=feitas.map(p=>exDe(p.id,me).tempo).filter(Boolean).reduce((a,t)=>{const x=t.split(":").map(Number);return a+(x[0]*3600+x[1]*60+(x[2]||0))},0);
+  const stat=(n,l)=>h("div",{class:"st"},h("b",{text:n}),h("span",{text:l}));
+  return h("div",{class:"meuano"},h("span",{class:"k",text:"O meu "+ano}),h("div",{class:"sts"},stat(String(feitas.length),feitas.length===1?"prova feita":"provas feitas"),stat(String(prox.length),prox.length===1?"próxima":"próximas"),seg?stat(Math.floor(seg/3600)+"h"+String(Math.floor(seg%3600/60)).padStart(2,"0"),"em prova"):null))}
+
 function historico(){if(!grupo||!passadas.length)return null;const ano=new Date().getFullYear();const foi=(pid,id)=>{const e=pres[pid]&&pres[pid][id];return e==="inscrito"||e==="vou"};
   const cont={};for(const p of passadas)if(p.data.startsWith(String(ano)))for(const id of Object.keys(pres[p.id]||{}))if(foi(p.id,id))cont[id]=(cont[id]||0)+1;
   const quadro=Object.entries(cont).sort((a,b)=>b[1]-a[1]||nomeDe(a[0]).localeCompare(nomeDe(b[0]),"pt"));
@@ -298,6 +324,7 @@ function draw(){
   const aberta=provaAberta();
   $("lista").hidden=!!aberta;$("view-prova").hidden=!aberta;
   for(const t of ["grupo","todas","nova"]){$("tab-"+t).setAttribute("aria-current",(!sec&&!aberta&&tab===t)?"page":"false");$("view-"+t).hidden=tab!==t}
+  $("vistaSeg").hidden=tab!=="todas";for(const b of $("vistaSeg").children)b.setAttribute("aria-pressed",String((b.dataset.v==="cal")===vistaCal));
   $("pgTitle").textContent=tab==="grupo"?"O grupo vai":tab==="todas"?"Provas":"Nova prova";$("resumoBtn").hidden=tab!=="grupo";if(tab!=="grupo")$("resumo").hidden=true;$("pgHead").hidden=!!aberta;
   if(aberta)detalhe(aberta);
   const fut=futuras();const grp=fut.filter(p=>temGente(p.id));
@@ -307,6 +334,7 @@ function draw(){
   const banner=minhas.length?(()=>{const p=minhas[0],e=pres[p.id][me],x=exDe(p.id,me);return h("button",{type:"button",class:"proxima",onclick:()=>abrir(p.id)},
     h("span",{class:"k",text:"A tua próxima prova"}),h("span",{class:"t",text:p.nome}),h("span",{class:"s",text:dataLonga(p.data)+" · "+faltam(p.data)+" · "+(e==="inscrito"?"inscrito":"ainda sem inscrição")+(x.percurso?" · "+x.percurso:"")}))})():null;
   listaPorMes(grp,$("view-grupo"),podeMarcar()?"Ainda ninguém marcou presença. Vai a Todas e carrega em Vou, Inscrito ou Talvez.":"Quando entrares no grupo, aqui aparecem as provas a que o grupo vai.");
+  {const ma=meuAno();if(ma)$("view-grupo").prepend(ma)}
   if(banner)$("view-grupo").prepend(banner);
   {const hs=historico();if(hs)$("view-grupo").append(hs)}
   const reg=REGIOES.find(r=>r[0]===filtroReg),naReg=p=>!reg||reg[2].includes(p.distrito);
@@ -330,7 +358,7 @@ function draw(){
   if(!$("concelhosList").options.length)$("concelhosList").replaceChildren(...LUG.c.map(c=>h("option",{value:c[4]+" ("+c[1]+")"})));
   {const nf=(filtroRaio&&casa?1:0)+($("fDistrito").value?1:0)+($("fMes").value?1:0);$("maisBtn").textContent=nf?"Filtros ("+nf+")":"Filtros";$("maisBtn").classList.toggle("on",!!nf)}
   const todas=fut.filter(p=>naReg(p)&&(!filtroRaio||!casa||(kmAte(p)!=null&&kmAte(p)<=filtroRaio))&&(!filtroTipos.size||tiposDe(p).some(t=>filtroTipos.has(t)))&&(!fd||p.distrito===fd)&&(!fm||p.data.slice(0,7)===fm)&&(!q||[p.nome,p.concelho,p.distrito].join(" ").toLowerCase().includes(q)));
-  listaPorMes(todas,$("todasList"),fut.length?"Nenhuma prova com estes filtros.":"Ainda não há provas.");
+  if(vistaCal)calendario(todas,$("todasList"));else listaPorMes(todas,$("todasList"),fut.length?"Nenhuma prova com estes filtros.":"Ainda não há provas.");
   fillSel($("fMes"),"Todos os meses",[...new Set(fut.map(p=>p.data.slice(0,7)))].sort().map(m=>[m,MESES[+m.slice(5)-1]+" "+m.slice(0,4)]));
   $("view-nova").querySelectorAll("input,select,button").forEach(el=>el.disabled=!podeMarcar());
   if(!$("resumo").hidden)$("resumoText").value=resumo();
@@ -439,7 +467,14 @@ $("gForm").addEventListener("submit",async e=>{e.preventDefault();if(!podeMarcar
   try{await api("grupos?codigo=eq."+grupo,{method:"PATCH",prefer:"return=minimal",body});grupoNome=nome;if(novoLogo!==null)grupoLogo=novoLogo;$("editarGrupo").hidden=true;draw();toast("Grupo actualizado")}
   catch(err){$("gMsg").textContent="Não foi possível guardar. Tenta outra vez."}});
 $("sair").addEventListener("click",()=>{me=null;store.set(chaveMe(),null);draw();window.scrollTo({top:0})});
-$("partilhar").addEventListener("click",()=>{const link=location.origin+location.pathname+"?g="+grupo;copiar("Junta-te"+(grupoNome?" aos "+grupoNome:" ao grupo")+" no Dorsal para combinarmos as provas de trail: "+link,null)});
+const linkGrupo=()=>location.origin+location.pathname+"?g="+grupo,textoConvite=()=>"Junta-te"+(grupoNome?" aos "+grupoNome:" ao grupo")+" no Dorsal para combinarmos as provas de trail: "+linkGrupo();
+function carregarQR(){return window.qrcode?Promise.resolve():new Promise((res,rej)=>{const s=document.createElement("script");s.src="qrcode.min.js?v=1";s.onload=res;s.onerror=rej;document.head.append(s)})}
+$("partilhar").addEventListener("click",async()=>{const c=$("convite");c.hidden=false;c.scrollIntoView({behavior:"smooth",block:"center"});$("qrBox").textContent="A gerar o código…";
+  try{await carregarQR();const q=qrcode(0,"M");q.addData(linkGrupo());q.make();$("qrBox").innerHTML=q.createSvgTag({cellSize:6,margin:3,scalable:true})}catch(_){$("qrBox").textContent="Não foi possível gerar o código QR. Usa o link."}});
+$("conviteX").addEventListener("click",()=>{$("convite").hidden=true});
+$("conviteCopy").addEventListener("click",()=>copiar(textoConvite(),null));
+$("conviteShare").addEventListener("click",()=>{if(navigator.share)navigator.share({title:"Dorsal"+(grupoNome?" · "+grupoNome:""),text:textoConvite()}).catch(()=>{});else copiar(textoConvite(),null)});
+document.querySelectorAll("#vistaSeg button").forEach(b=>b.addEventListener("click",()=>{vistaCal=b.dataset.v==="cal";store.set("dorsal.vista",vistaCal?"cal":null);draw()}));
 $("nDistrito").replaceChildren(h("option",{value:"",text:"Escolher"}),...DISTRITOS.map(d=>h("option",{value:d,text:d})));
 $("novaForm").addEventListener("submit",async e=>{e.preventDefault();if(!podeMarcar())return;
   const nome=$("nNome").value.trim(),data=$("nData").value;if(!nome||!data)return;
