@@ -288,4 +288,9 @@ table.pt tr.prova td{background:var(--orange-soft);font-weight:600}
 .sts{display:flex;gap:18px;margin-top:4px}
 .st b{display:block;font-family:var(--display);font-size:1.8rem;line-height:1;font-variant-numeric:tabular-nums}
 .st span{font-size:.8rem;color:var(--muted)}
+.pushcard,.novasbox{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:10px;padding:12px 14px;margin:0 0 10px;display:flex;flex-direction:column;gap:6px}
+.pushcard p{margin:0;font-size:.92rem;color:var(--muted)}
+.novasbox{border-left-color:var(--green);align-items:flex-start}
+.linkbtn.com.nova{color:var(--accent);font-weight:700}
+.bottomnav .tab.temnovas::after{content:"";position:absolute;top:4px;left:calc(50% - 16px);width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 0 2px var(--surface)}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:6px;font-weight:600;z-index:10}

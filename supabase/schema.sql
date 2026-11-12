@@ -145,3 +145,35 @@ create policy comentarios_criar on public.comentarios for insert with check (gru
 drop policy if exists comentarios_apagar on public.comentarios;
 create policy comentarios_apagar on public.comentarios for delete using (grupo = public.grupo_atual());
 grant select, insert, delete on public.comentarios to anon;
+
+-- Notificações push (conversas). A função supabase/functions/notificar envia as notificações.
+create table if not exists public.push_config (
+  id int primary key default 1 check (id = 1),
+  public_key text not null,
+  private_key text not null,
+  criado_em timestamptz not null default now()
+);
+alter table public.push_config enable row level security;
+revoke all on public.push_config from anon, authenticated;
+create table if not exists public.subscricoes (
+  endpoint text not null check (char_length(endpoint) between 10 and 1000),
+  grupo text not null references public.grupos(codigo) on delete cascade,
+  membro_id uuid not null references public.membros(id) on delete cascade,
+  p256dh text not null check (char_length(p256dh) <= 200),
+  auth text not null check (char_length(auth) <= 100),
+  criado_em timestamptz not null default now(),
+  primary key (endpoint, grupo)
+);
+alter table public.subscricoes enable row level security;
+drop policy if exists subscricoes_ler on public.subscricoes;
+create policy subscricoes_ler on public.subscricoes for select using (grupo = public.grupo_atual());
+drop policy if exists subscricoes_criar on public.subscricoes;
+create policy subscricoes_criar on public.subscricoes for insert with check (grupo = public.grupo_atual() and exists (select 1 from public.membros m where m.id = membro_id and m.grupo = public.grupo_atual()));
+drop policy if exists subscricoes_alterar on public.subscricoes;
+create policy subscricoes_alterar on public.subscricoes for update using (grupo = public.grupo_atual()) with check (grupo = public.grupo_atual() and exists (select 1 from public.membros m where m.id = membro_id and m.grupo = public.grupo_atual()));
+drop policy if exists subscricoes_apagar on public.subscricoes;
+create policy subscricoes_apagar on public.subscricoes for delete using (grupo = public.grupo_atual());
+grant select (endpoint, grupo, membro_id) on public.subscricoes to anon;
+grant insert, update, delete on public.subscricoes to anon;
+alter table public.comentarios add column if not exists notificado boolean not null default false;
+revoke update on public.comentarios from anon;

@@ -13,7 +13,9 @@ const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},se
 
 // ---------- estado ----------
 let grupo=null,grupoNome="",grupoLogo="",me=null;
-let extra={},meteo={},passadas=[],nCom={},conv={};
+let extra={},meteo={},passadas=[],nCom={},conv={},maxCom={},novas={};
+const lidas=()=>{try{return JSON.parse(store.get("dorsal.lidas."+grupo)||"null")}catch(_){return null}},guardarLidas=L=>store.set("dorsal.lidas."+grupo,JSON.stringify(L));
+function marcarLida(pid,id){if(!id)return;const L=lidas()||{};if((L[pid]||0)<id){L[pid]=id;guardarLidas(L)}if(novas[pid]){delete novas[pid]}}
 let provas=[],membros={},pres={},cliques={},loaded=false;
 let histTodas=false,vistaCal=store.get("dorsal.vista")==="cal",calMes=null,calDia=null;
 let filtroReg=store.get("dorsal.regiao")||"",filtroDist=store.get("dorsal.distrito")||"";
@@ -56,7 +58,7 @@ async function carregar(){
   try{
     const hoje=hojeISO();
     const reqs=[api("provas?select=*&data=gte."+hoje+"&order=data.asc,nome.asc")];
-    if(grupo)reqs.push(api("grupos?select=nome,logo&codigo=eq."+grupo),api("membros?select=id,nome&order=nome.asc"),api("presencas?select=membro_id,prova_id,estado,percurso,boleia,lugares,tempo"),api("cliques?select=prova_id"),api("comentarios?select=prova_id").catch(()=>[]));
+    if(grupo)reqs.push(api("grupos?select=nome,logo&codigo=eq."+grupo),api("membros?select=id,nome&order=nome.asc"),api("presencas?select=membro_id,prova_id,estado,percurso,boleia,lugares,tempo"),api("cliques?select=prova_id"),api("comentarios?select=prova_id,id,membro_id").catch(()=>[]));
     const [ps,gs,ms,pr,cl,co]=await Promise.all(reqs);
     provas=ps||[];
     if(grupo){
@@ -66,7 +68,8 @@ async function carregar(){
         {const ids=new Set(provas.map(p=>p.id)),falta=Object.keys(pres).filter(id=>!ids.has(id));passadas=[];
           if(falta.length){try{passadas=(await api("provas?select=*&order=data.desc&id=in.("+falta.map(i=>'"'+encodeURIComponent(i)+'"').join(",")+")"))||[]}catch(_){}}}
         cliques={};for(const c of cl||[])cliques[c.prova_id]=(cliques[c.prova_id]||0)+1;
-        nCom={};for(const c of co||[])nCom[c.prova_id]=(nCom[c.prova_id]||0)+1;{const a=provaAberta();if(a&&conv[a])carregarConversa(a)}
+        nCom={};maxCom={};novas={};for(const c of co||[]){nCom[c.prova_id]=(nCom[c.prova_id]||0)+1;maxCom[c.prova_id]=Math.max(maxCom[c.prova_id]||0,c.id)}
+        {let L=lidas();if(!L){L={};for(const k in maxCom)L[k]=maxCom[k];guardarLidas(L)}for(const c of co||[])if(c.id>(L[c.prova_id]||0)&&c.membro_id!==me)novas[c.prova_id]=(novas[c.prova_id]||0)+1}{const a=provaAberta();if(a&&conv[a])carregarConversa(a)}
         me=store.get(chaveMe());if(me&&!membros[me]){me=null;store.set(chaveMe(),null)}
         if($("statusText").textContent.startsWith("Sem ligação"))status("");}
     }
@@ -127,7 +130,7 @@ const exDe=(pid,id)=>(extra[pid]&&extra[pid][id])||{percurso:"",boleia:"",lugare
 function normTempo(v){v=String(v||"").trim().replace(/[hH]/,":").replace(/[mM']/,":").replace(/[sS"]/,"").replace(/\s+/g,"");if(!v)return"";const m=v.match(/^(\d{1,3}):(\d{1,2})(?::(\d{1,2}))?$/);if(!m||+m[2]>59||(m[3]&&+m[3]>59))return null;return +m[1]+":"+m[2].padStart(2,"0")+(m[3]!=null?":"+m[3].padStart(2,"0"):"")}
 // ---------- conversa por prova ----------
 function carregarConversa(pid){if(!ONLINE||!grupo)return;conv[pid]=conv[pid]||{estado:"a",lista:[]};
-  api("comentarios?select=id,membro_id,texto,criado_em&prova_id=eq."+encodeURIComponent(pid)+"&order=criado_em.asc").then(l=>{conv[pid]={estado:"ok",lista:l||[]};nCom[pid]=(l||[]).length;draw()}).catch(()=>{conv[pid].estado="erro";draw()})}
+  api("comentarios?select=id,membro_id,texto,criado_em&prova_id=eq."+encodeURIComponent(pid)+"&order=criado_em.asc").then(l=>{conv[pid]={estado:"ok",lista:l||[]};nCom[pid]=(l||[]).length;if(provaAberta()===pid&&l&&l.length)marcarLida(pid,Math.max(...l.map(x=>x.id)));draw()}).catch(()=>{conv[pid].estado="erro";draw()})}
 function haQuanto(iso){const s=(Date.now()-new Date(iso).getTime())/1000;if(s<60)return"agora";if(s<3600)return"há "+Math.floor(s/60)+" min";if(s<86400)return"há "+Math.floor(s/3600)+" h";const d=new Date(iso);return d.getDate()+" "+MESES[d.getMonth()].slice(0,3)}
 let rascunho={};
 function conversa(p){if(!ONLINE||!grupo)return null;if(!conv[p.id])carregarConversa(p.id);const c=conv[p.id]||{estado:"a",lista:[]};
@@ -136,8 +139,40 @@ function conversa(p){if(!ONLINE||!grupo)return null;if(!conv[p.id])carregarConve
     h("p",{class:"hint",text:c.estado==="a"?"A carregar…":c.estado==="erro"?"Não foi possível carregar a conversa.":"Ainda ninguém escreveu. Combina aqui o encontro, a boleia ou o jantar."});
   let form=null;if(podeMarcar()){const ta=h("textarea",{rows:"2",maxlength:"500",placeholder:"Escreve para o grupo…","aria-label":"Mensagem",oninput:e=>{rascunho[p.id]=e.target.value}});ta.value=rascunho[p.id]||"";
     form=h("form",{class:"cm-form",onsubmit:async e=>{e.preventDefault();const t=ta.value.trim();if(!t)return;const b=e.target.querySelector("button");b.disabled=true;
-      try{await api("comentarios",{method:"POST",prefer:"return=minimal",body:{grupo,prova_id:p.id,membro_id:me,texto:t.slice(0,500)}});rascunho[p.id]="";carregarConversa(p.id)}catch(_){toast("Não foi possível enviar.");b.disabled=false}}},ta,h("button",{class:"btn primary small",type:"submit",text:"Enviar"}))}
+      try{const r=await api("comentarios",{method:"POST",prefer:"return=representation",body:{grupo,prova_id:p.id,membro_id:me,texto:t.slice(0,500)}});rascunho[p.id]="";carregarConversa(p.id);if(r&&r[0])avisarGrupo(r[0].id)}catch(_){toast("Não foi possível enviar.");b.disabled=false}}},ta,h("button",{class:"btn primary small",type:"submit",text:"Enviar"}))}
   return h("section",{class:"grupo-bloco conversa"},h("h3",null,"Conversa ",h("span",{class:"n",text:String(c.lista.length||"")})),lista,form)}
+
+// ---------- notificações ----------
+const FN=ONLINE?CFG.supabaseUrl.replace(/\/$/,"")+"/functions/v1/notificar":"";
+const fnHeaders=()=>({apikey:CFG.supabaseAnonKey,Authorization:"Bearer "+CFG.supabaseAnonKey,"x-grupo":grupo||"","Content-Type":"application/json"});
+function avisarGrupo(id){if(!FN)return;fetch(FN,{method:"POST",headers:fnHeaders(),body:JSON.stringify({comentario_id:id}),keepalive:true}).catch(()=>{})}
+const pushSuportado=()=>"serviceWorker" in navigator&&"PushManager" in window&&"Notification" in window;
+const ehStandalone=()=>matchMedia("(display-mode: standalone)").matches||navigator.standalone===true;
+const ehIOS=/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
+const pushAtivo=()=>!!grupo&&!!store.get("dorsal.push."+grupo)&&"Notification" in window&&Notification.permission==="granted";
+function b64u(s){const p="=".repeat((4-s.length%4)%4),b=atob((s+p).replace(/-/g,"+").replace(/_/g,"/"));return Uint8Array.from(b,c=>c.charCodeAt(0))}
+let pushOcupado=false;
+async function activarPush(){if(pushOcupado)return;if(!pushSuportado()){toast(ehIOS?"Instala a app no ecrã principal para teres notificações.":"Este navegador não suporta notificações.");return}
+  pushOcupado=true;draw();
+  try{const perm=await Notification.requestPermission();if(perm!=="granted"){toast("Sem autorização, não há notificações.");return}
+    const reg=await navigator.serviceWorker.ready;const {publicKey}=await (await fetch(FN,{headers:fnHeaders()})).json();
+    let sub=await reg.pushManager.getSubscription();if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64u(publicKey)});
+    const j=sub.toJSON();await api("subscricoes?on_conflict=endpoint,grupo",{method:"POST",prefer:"resolution=merge-duplicates,return=minimal",body:{endpoint:j.endpoint,grupo,membro_id:me,p256dh:j.keys.p256dh,auth:j.keys.auth}});
+    store.set("dorsal.push."+grupo,j.endpoint);toast("Notificações activadas")}
+  catch(e){toast("Não foi possível activar as notificações.")}finally{pushOcupado=false;draw()}}
+async function desactivarPush(){const ep=store.get("dorsal.push."+grupo);store.set("dorsal.push."+grupo,null);
+  try{if(ep)await api("subscricoes?endpoint=eq."+encodeURIComponent(ep)+"&grupo=eq."+grupo,{method:"DELETE"})}catch(_){}
+  const outros=gruposConhecidos().some(g=>g.c!==grupo&&store.get("dorsal.push."+g.c));
+  if(!outros&&pushSuportado()){try{const reg=await navigator.serviceWorker.ready;const s=await reg.pushManager.getSubscription();if(s)await s.unsubscribe()}catch(_){}}
+  toast("Notificações desactivadas");draw()}
+function pushCartao(){if(!me||!ONLINE||pushAtivo()||store.get("dorsal.pushdispensa."+grupo))return null;
+  const fechar=h("button",{class:"linkbtn",type:"button",onclick:()=>{store.set("dorsal.pushdispensa."+grupo,"1");draw()},text:"Agora não"});
+  let corpo,acao=null;
+  if(ehIOS&&!ehStandalone())corpo="Para receberes um aviso quando há mensagem nova numa prova, instala a Dorsal no ecrã principal (Partilhar → Adicionar ao ecrã principal) e activa as notificações a partir daí.";
+  else if(!pushSuportado())return null;
+  else if(Notification.permission==="denied")corpo="As notificações estão bloqueadas para a Dorsal. Para as receberes, autoriza-as nas definições do telemóvel.";
+  else{corpo="Recebe um aviso no telemóvel quando alguém do grupo escreve na conversa de uma prova.";acao=h("button",{class:"btn primary small",type:"button",disabled:pushOcupado?true:null,onclick:activarPush,text:pushOcupado?"A activar…":"Activar notificações"})}
+  return h("div",{class:"pushcard"},h("strong",{text:"🔔 Avisos das conversas"}),h("p",{text:corpo}),h("div",{class:"row"},acao,fechar))}
 
 // ---------- plano de treino ----------
 const ALVO_LONGA={"Caminhada":120,"Trail curto":100,"Trail longo":180,"Skyrunning":150,"Trail ultra":300,"Backyard":300};
@@ -249,7 +284,7 @@ function card(p){const d=parseD(p.data),q=quem(p.id);
     insc?h("a",{href:insc,target:"_blank",rel:"noopener",onclick:()=>cliqueInsc(p.id),text:"Inscrição ↗"}):h("span",{class:"hint",text:"Sem link de inscrição"}),
     info?h("a",{href:info,target:"_blank",rel:"noopener",text:"Informação ↗"}):null,
     h("button",{class:"linkbtn",onclick:()=>abrir(p.id),text:ONLINE&&grupo?"Quem vai"+(temGente(p.id)?" ("+contagem(q)+")":""):"Abrir prova"}),
-    nCom[p.id]?h("button",{class:"linkbtn com",onclick:()=>abrir(p.id),text:"💬 "+nCom[p.id]}):null,
+    nCom[p.id]?h("button",{class:"linkbtn com"+(novas[p.id]?" nova":""),onclick:()=>abrir(p.id),text:"💬 "+nCom[p.id]+(novas[p.id]?" · "+novas[p.id]+(novas[p.id]===1?" nova":" novas"):"")}):null,
     (podeMarcar()&&p.grupo&&p.grupo===grupo)?h("button",{class:"linkbtn",onclick:()=>remover(p.id),text:confirmDel===p.id?"Confirmar remoção":"Remover"}):null);
   const n=cliques[p.id]||0,dias=Math.round((d-hoje())/864e5);
   return h("article",{class:"card"},
@@ -335,6 +370,10 @@ function draw(){
     h("span",{class:"k",text:"A tua próxima prova"}),h("span",{class:"t",text:p.nome}),h("span",{class:"s",text:dataLonga(p.data)+" · "+faltam(p.data)+" · "+(e==="inscrito"?"inscrito":"ainda sem inscrição")+(x.percurso?" · "+x.percurso:"")}))})():null;
   listaPorMes(grp,$("view-grupo"),podeMarcar()?"Ainda ninguém marcou presença. Vai a Todas e carrega em Vou, Inscrito ou Talvez.":"Quando entrares no grupo, aqui aparecem as provas a que o grupo vai.");
   {const ma=meuAno();if(ma)$("view-grupo").prepend(ma)}
+  {const ids=Object.keys(novas).filter(k=>novas[k]);if(ids.length){const todasP=[...provas,...passadas];$("view-grupo").prepend(h("div",{class:"novasbox"},h("strong",{text:"💬 Mensagens novas"}),...ids.map(pid=>{const pp=todasP.find(x=>x.id===pid);return pp?h("button",{type:"button",class:"linkbtn",onclick:()=>abrir(pid),text:pp.nome+" ("+novas[pid]+")"}):null})))}}
+  {const pc=pushCartao();if(pc)$("view-grupo").prepend(pc)}
+  $("tab-grupo").classList.toggle("temnovas",Object.values(novas).some(Boolean));
+  $("pushBtn").hidden=!(me&&ONLINE&&pushSuportado()&&(pushAtivo()||store.get("dorsal.pushdispensa."+grupo)));$("pushBtn").textContent=pushAtivo()?"Desactivar notificações":"Activar notificações";
   if(banner)$("view-grupo").prepend(banner);
   {const hs=historico();if(hs)$("view-grupo").append(hs)}
   const reg=REGIOES.find(r=>r[0]===filtroReg),naReg=p=>!reg||reg[2].includes(p.distrito);
@@ -442,6 +481,7 @@ $("casaIn").addEventListener("change",()=>{const v=$("casaIn").value,m=v.match(/
 $("fDistrito").addEventListener("input",()=>{filtroDist=$("fDistrito").value;store.set("dorsal.distrito",filtroDist||null);draw()});
 $("resumoBtn").addEventListener("click",()=>{const r=$("resumo");r.hidden=!r.hidden;if(!r.hidden){const t=resumo();$("resumoText").value=t;$("resumoWa").href="https://wa.me/?text="+encodeURIComponent(t)}});
 $("resumoCopy").addEventListener("click",()=>copiar($("resumoText").value,$("resumoText")));
+$("pushBtn").addEventListener("click",()=>{if(pushAtivo())desactivarPush();else{store.set("dorsal.pushdispensa."+grupo,null);activarPush()}});
 $("entrarX").addEventListener("click",()=>{entrarAberto=false;draw()});
 $("criarForm").addEventListener("submit",async e=>{e.preventDefault();const nome=$("criarNome").value.trim().slice(0,40);if(!nome){$("criarMsg").textContent="Escreve o nome do grupo.";return}
   const b=$("criarForm").querySelector("button");b.disabled=true;$("criarMsg").textContent="A criar…";
