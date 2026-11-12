@@ -4,7 +4,7 @@
 -- as regras abaixo só mostram e deixam alterar dados desse grupo.
 
 create or replace function public.grupo_atual() returns text
-language sql stable as $$
+language sql stable set search_path = public as $$
   select nullif(lower(coalesce(current_setting('request.headers', true)::json->>'x-grupo', '')), '')
 $$;
 
