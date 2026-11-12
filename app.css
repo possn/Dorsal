@@ -318,4 +318,22 @@ table.pt tr.prova td{background:var(--orange-soft);font-weight:600}
 .tlista .linkbtn{margin-left:auto;font-size:.8rem}
 .gpxpre{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 .leaflet-container{font-family:var(--body)}
+.est .esttop{margin:10px 0}
+.est .seg button[aria-pressed="true"]{background:var(--fg);color:var(--bg)}
+.est .esttop select{width:auto}
+.barras{width:100%;height:auto;display:block;background:var(--surface);border:1px solid var(--line);border-radius:8px;margin:6px 0}
+.barras .grade{stroke:var(--line)}
+.barras .eixo{fill:var(--muted);font-size:17px;font-family:var(--body)}
+.barras .val{fill:var(--fg);font-size:15px;font-weight:600;font-family:var(--body)}
+.recordes{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.recordes li{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}
+.recordes .rl{color:var(--muted);font-size:.85rem;flex-basis:100%}
+.recordes strong{font-family:var(--display);font-size:1.4rem}
+.conquistas{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.conquistas li{display:flex;gap:10px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px;opacity:.5}
+.conquistas li.ok{opacity:1;border-color:var(--accent)}
+.conquistas .med{font-size:1.6rem;color:var(--accent);line-height:1}
+.conquistas strong{display:block;font-size:.92rem}
+.conquistas small{color:var(--muted);font-size:.78rem}
+.quadrog tr.eu td{background:var(--orange-soft)}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:6px;font-weight:600;z-index:10}

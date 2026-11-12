@@ -177,7 +177,7 @@ function pushCartao(){if(!me||!ONLINE||pushAtivo()||store.get("dorsal.pushdispen
 // ---------- trilhos GPS (GPX) ----------
 const CORES=["#ee5a0f","#2563eb","#2e6b43","#9333ea","#d97706","#0891b2","#be123c","#4d7c0f"];
 const hms=s=>Math.floor(s/3600)+":"+String(Math.floor(s%3600/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0");
-function ritmo(dur,km){if(!dur||!km)return"";const s=dur/km;return Math.floor(s/60)+":"+String(Math.round(s%60)).padStart(2,"0")+" /km"}
+function ritmo(dur,km){if(!dur||!km)return"";const s=Math.round(dur/km);return Math.floor(s/60)+":"+String(s%60).padStart(2,"0")+" /km"}
 async function guardarTrilho(pid,g){
   if(!(pres[pid]&&pres[pid][me]))await api("presencas?on_conflict=membro_id,prova_id",{method:"POST",prefer:"resolution=merge-duplicates,return=minimal",body:{grupo,membro_id:me,prova_id:pid,estado:"inscrito",atualizado:new Date().toISOString()}});
   await api("trilhos?on_conflict=membro_id,prova_id",{method:"POST",prefer:"resolution=merge-duplicates,return=minimal",body:{grupo,prova_id:pid,membro_id:me,km:g.km,dplus:g.dplus,dminus:g.dminus,duracao_s:g.duracao_s,inicio:g.inicio?g.inicio.toISOString():null,pontos:g.pontos,elev:g.elev,atualizado:new Date().toISOString()}});
@@ -208,11 +208,68 @@ function trilhosView(p){if(!grupo||!ONLINE||parseD(p.data)>hoje())return null;if
     h("input",{id:"gpx-"+p.id,type:"file",class:"vh",onchange:e=>{const f=e.target.files[0];e.target.value="";if(f)importarGPX(p.id,f)}})):null;
   const linhas=T.lista.map((t,i)=>h("li",null,h("span",{class:"cor",style:"background:"+CORES[i%CORES.length]}),h("strong",{text:nomeDe(t.membro_id)+(t.membro_id===me?" (tu)":"")}),
     h("span",{class:"tdados",text:String(+t.km).replace(".",",")+" km · "+t.dplus+" m D+"+(t.duracao_s?" · "+hms(t.duracao_s)+" · "+ritmo(t.duracao_s,+t.km):"")}),
+    h("button",{class:"linkbtn",type:"button",onclick:()=>descarregarGPX(p,t),text:"GPX ↓"}),
     t.membro_id===me?h("button",{class:"linkbtn",type:"button",onclick:async()=>{if(!confirm("Apagar o teu trilho desta prova?"))return;try{await api("trilhos?membro_id=eq."+me+"&prova_id=eq."+encodeURIComponent(p.id),{method:"DELETE"});temTrilho.delete(p.id+"|"+me);delete trilhosP[p.id];if(mapas[p.id]){try{mapas[p.id].map.remove()}catch(_){}delete mapas[p.id]}draw()}catch(_){toast("Não foi possível apagar.")}},text:"apagar"}):null));
   let perfil=null;if(T.lista.length){perfil=DorsalGPX.perfilSVG(T.lista.map((t,i)=>({coords:DorsalGPX.descodificar(t.pontos),elev:t.elev,cor:CORES[i%CORES.length]})))}
   return h("section",{class:"grupo-bloco trilhos"},h("div",{class:"row between"},h("h3",null,"Trilhos GPS ",h("span",{class:"n",text:T.lista.length?String(T.lista.length):""})),imp),
     T.estado==="a"?h("p",{class:"hint",text:"A carregar…"}):T.lista.length?h("div",null,mapaTrilhos(p.id,T.lista),perfil,h("ul",{class:"tlista"},...linhas)):
     h("p",{class:"hint",text:"Ninguém importou ainda o trilho desta prova. Exporta o GPX do relógio, do Strava ou do Wikiloc e importa-o aqui: a app calcula km, D+, tempo e ritmo."}))}
+
+function descarregarGPX(p,t){const c=DorsalGPX.descodificar(t.pontos),el=t.elev?t.elev.split(","):[];const esc=s=>String(s).replace(/[<>&]/g,m=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[m]));
+  const gpx='<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Dorsal" xmlns="http://www.topografix.com/GPX/1/1"><metadata><name>'+esc(p.nome)+'</name></metadata><trk><name>'+esc(p.nome+" · "+nomeDe(t.membro_id))+'</name><trkseg>'+
+    c.map((x,i)=>'<trkpt lat="'+x[0].toFixed(5)+'" lon="'+x[1].toFixed(5)+'">'+(el[i]!=null&&el.length===c.length?'<ele>'+el[i]+'</ele>':'')+'</trkpt>').join("")+'</trkseg></trk></gpx>';
+  const url=URL.createObjectURL(new Blob([gpx],{type:"application/gpx+xml"}));const a=h("a",{href:url,download:(p.nome+"-"+nomeDe(t.membro_id)).normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-zA-Z0-9]+/g,"-")+".gpx"});document.body.append(a);a.click();setTimeout(()=>{a.remove();URL.revokeObjectURL(url)},2000)}
+
+// ---------- estatísticas e conquistas ----------
+let estQuem="eu",estAno=null;
+function feitasDe(id,ano){return passadas.filter(p=>(!ano||p.data.startsWith(ano))&&foiA(p.id,id))}
+function barrasSVG(vals,rotulos,unid,cor){const W=600,H=190,P={l:60,r:8,t:18,b:28},mx=Math.max(1,...vals),bw=(W-P.l-P.r)/vals.length;const ns="http://www.w3.org/2000/svg";
+  const svg=document.createElementNS(ns,"svg");svg.setAttribute("viewBox","0 0 "+W+" "+H);svg.setAttribute("class","barras");svg.setAttribute("role","img");
+  svg.setAttribute("aria-label",rotulos.map((r,i)=>r+": "+fmtN(Math.round(vals[i]*10)/10)+" "+unid).join("; "));
+  const add=(t,a,x)=>{const e=document.createElementNS(ns,t);for(const k in a)e.setAttribute(k,a[k]);if(x!=null)e.textContent=x;svg.append(e);return e};
+  for(const f of [0,.5,1]){const y=P.t+(H-P.t-P.b)*(1-f);add("line",{x1:P.l,x2:W-P.r,y1:y,y2:y,class:"grade"});add("text",{x:P.l-6,y:y+6,"text-anchor":"end",class:"eixo"},fmtN(Math.round(mx*f)))}
+  vals.forEach((v,i)=>{const hgt=(H-P.t-P.b)*v/mx,x=P.l+i*bw+bw*.15;if(v>0){add("rect",{x,y:H-P.b-hgt,width:bw*.7,height:Math.max(2,hgt),rx:3,fill:cor});add("text",{x:x+bw*.35,y:H-P.b-hgt-4,"text-anchor":"middle",class:"val"},fmtN(Math.round(v)))}
+    add("text",{x:x+bw*.35,y:H-8,"text-anchor":"middle",class:"eixo"},rotulos[i])});return svg}
+const CONQ=[
+  ["Primeira prova","1 prova feita",t=>t.n>=1],["Habitué","5 provas",t=>t.n>=5],["Viciado","10 provas",t=>t.n>=10],["Colecionador","20 provas",t=>t.n>=20],
+  ["100 km","100 km em provas",t=>t.km>=100],["250 km","250 km em provas",t=>t.km>=250],["500 km","500 km em provas",t=>t.km>=500],
+  ["Montanheiro","5000 m de D+",t=>t.d>=5000],["Everest","8849 m de D+ acumulado",t=>t.d>=8849],["Duplo Everest","17 698 m de D+",t=>t.d>=17698],
+  ["Maratona de trilho","uma prova com 42 km ou mais",t=>t.maxKm>=42],["Ultra","uma prova com 50 km ou mais",t=>t.maxKm>=50],["Muro vertical","uma prova com 2000 m de D+",t=>t.maxD>=2000],
+  ["Fiel ao grupo","5 provas com mais alguém do grupo",t=>t.comGrupo>=5]];
+function estatTotais(id,ano){const fs=feitasDe(id,ano);const t={n:fs.length,km:0,d:0,sg:0,maxKm:0,maxD:0,melhorRitmo:null,comGrupo:0,meses:Array(12).fill(0),mesesD:Array(12).fill(0),provaKm:null,provaD:null,provaRitmo:null};
+  for(const p of fs){const x=exDe(p.id,id),km=+x.km||0,d=+x.dplus||0,sg=segDeTempo(x.tempo),m=+p.data.slice(5,7)-1;t.km+=km;t.d+=d;t.sg+=sg;t.meses[m]+=km;t.mesesD[m]+=d;
+    if(km>t.maxKm){t.maxKm=km;t.provaKm=p}if(d>t.maxD){t.maxD=d;t.provaD=p}if(km>=5&&sg){const r=sg/km;if(t.melhorRitmo==null||r<t.melhorRitmo){t.melhorRitmo=r;t.provaRitmo=p}}
+    if(Object.keys(pres[p.id]||{}).some(o=>o!==id&&foiA(p.id,o)))t.comGrupo++}
+  return t}
+function estatisticas(){const box=h("article",{class:"sec est"});const anoAtual=String(new Date().getFullYear());estAno=estAno||anoAtual;
+  const anos=[...new Set([anoAtual,...passadas.map(p=>p.data.slice(0,4))])].sort().reverse();
+  box.append(h("h1",{text:"Estatísticas"}));
+  if(!grupo||!me){box.append(h("p",{class:"lead",text:"Entra num grupo e regista as tuas provas feitas para veres aqui os teus números."}));return box}
+  box.append(h("div",{class:"row between esttop"},h("div",{class:"seg"},...[["eu","Eu"],["grupo","Grupo"]].map(([k,l])=>h("button",{type:"button","aria-pressed":String(estQuem===k),onclick:()=>{estQuem=k;draw()},text:l}))),
+    h("select",{"aria-label":"Ano",onchange:e=>{estAno=e.target.value;draw()}},...anos.map(a=>{const o=h("option",{value:a,text:a});if(a===estAno)o.selected=true;return o}))));
+  const ids=estQuem==="eu"?[me]:Object.keys(membros);const T=ids.map(id=>[id,estatTotais(id,estAno)]);
+  const soma={n:0,km:0,d:0,sg:0,meses:Array(12).fill(0),mesesD:Array(12).fill(0)};
+  if(estQuem==="eu")Object.assign(soma,T[0][1]);else{const vistas=new Set();for(const [id,t] of T){soma.km+=t.km;soma.d+=t.d;soma.sg+=t.sg;t.meses.forEach((v,i)=>soma.meses[i]+=v);t.mesesD.forEach((v,i)=>soma.mesesD[i]+=v);for(const p of feitasDe(id,estAno))vistas.add(p.id)}soma.n=vistas.size}
+  const stat=(n,l)=>h("div",{class:"st"},h("b",{text:n}),h("span",{text:l}));
+  box.append(h("div",{class:"meuano"},h("span",{class:"k",text:(estQuem==="eu"?nomeDe(me):(grupoNome||"O grupo"))+" · "+estAno}),h("div",{class:"sts"},
+    stat(String(soma.n),soma.n===1?"prova":"provas"),stat(fmtN(Math.round(soma.km*10)/10),"km"),stat(soma.d>=1000?fmtN(Math.round(soma.d/100)/10)+"k":String(Math.round(soma.d)),"m D+"),soma.sg?stat(fmtH(soma.sg),"em prova"):null)));
+  if(!soma.n){box.append(h("p",{class:"hint",text:"Ainda não há provas feitas em "+estAno+". Regista-as no separador do grupo, em Provas feitas, ou importa o GPX numa prova que já passou."}));return box}
+  const M=["J","F","M","A","M","J","J","A","S","O","N","D"];
+  box.append(h("h2",{text:"Km por mês"}),barrasSVG(soma.meses,M,"km","#ee5a0f"),h("h2",{text:"D+ por mês (m)"}),barrasSVG(soma.mesesD,M,"m","#2e6b43"));
+  if(estQuem==="eu"){const t=T[0][1];
+    const rec=(l,v,p)=>h("li",null,h("span",{class:"rl",text:l}),h("strong",{text:v}),p?h("button",{class:"linkbtn",type:"button",onclick:()=>abrir(p.id),text:p.nome}):null);
+    box.append(h("h2",{text:"Recordes de "+estAno}),h("ul",{class:"recordes"},
+      t.provaKm?rec("Prova mais longa",fmtN(Math.round(t.maxKm*10)/10)+" km",t.provaKm):null,
+      t.provaD?rec("Mais D+",t.maxD+" m",t.provaD):null,
+      t.provaRitmo?rec("Ritmo mais rápido (≥5 km)",ritmo(t.melhorRitmo,1),t.provaRitmo):null,
+      (()=>{const mx=Math.max(...t.meses);return mx?rec("Melhor mês",MESES[t.meses.indexOf(mx)]+" · "+fmtN(Math.round(mx*10)/10)+" km",null):null})()));
+    const tTudo=estatTotais(me,null);
+    box.append(h("h2",{text:"Conquistas"}),h("p",{class:"hint",text:"Contam todas as provas registadas, de todos os anos."}),h("ul",{class:"conquistas"},...CONQ.map(([n,d,f])=>{const ok=f(tTudo);return h("li",{class:ok?"ok":null},h("span",{class:"med","aria-hidden":"true",text:ok?"★":"☆"}),h("span",null,h("strong",{text:n}),h("small",{text:d})))})))}
+  else{const ord=T.filter(([,t])=>t.n).sort((a,b)=>b[1].km-a[1].km||b[1].n-a[1].n);
+    box.append(h("h2",{text:"Quadro de "+estAno}),h("table",{class:"pt quadrog"},h("thead",null,h("tr",null,...["","Provas","Km","D+","Tempo"].map(x=>h("th",{text:x})))),
+      h("tbody",null,...ord.map(([id,t])=>h("tr",{class:id===me?"eu":null},h("td",null,h("strong",{text:nomeDe(id)})),h("td",{text:String(t.n)}),h("td",{text:fmtN(Math.round(t.km*10)/10)}),h("td",{text:String(Math.round(t.d))}),h("td",{text:t.sg?fmtH(t.sg):"—"}))))))}
+  box.append(h("p",{class:"hint",text:"Os números vêm dos km, D+ e tempos registados em cada prova feita (à mão ou por GPX)."}));
+  return box}
 
 // ---------- plano de treino ----------
 const ALVO_LONGA={"Caminhada":120,"Trail curto":100,"Trail longo":180,"Skyrunning":150,"Trail ultra":300,"Backyard":300};
@@ -492,7 +549,7 @@ function draw(){
 
 // ---------- secções (menu lateral) ----------
 const SECOES=window.DORSAL_SECOES||[];
-function secAtual(){const m=location.hash.match(/[#&]s=([a-z-]+)/);return m&&SECOES.some(x=>x.id===m[1])?m[1]:null}
+function secAtual(){const m=location.hash.match(/[#&]s=([a-z-]+)/);return m&&(m[1]==="estatisticas"||SECOES.some(x=>x.id===m[1]))?m[1]:null}
 let secDesenhada=null;
 function comRefs(texto,sid){const out=[];let i=0;String(texto).replace(/\[(\d+)\]/g,(m,n,pos)=>{out.push(texto.slice(i,pos));
   out.push(h("sup",null,h("a",{href:"#",onclick:e=>{e.preventDefault();const f=document.getElementById("f-"+sid+"-"+n);if(f)f.scrollIntoView({behavior:"smooth",block:"center"})},"aria-label":"Fonte "+n,text:"["+n+"]"})));i=pos+m.length;return m});
@@ -538,14 +595,14 @@ function bloco(b,sid){switch(b.t){
   case "calc-esforco":return calcEsforco(sid);
   case "calc-abast":return calcAbast(sid);
   default:return null}}
-function desenharSec(sid){if(secDesenhada===sid)return;secDesenhada=sid;const S=SECOES.find(x=>x.id===sid);const box=$("pg-sec");
+function desenharSec(sid){if(sid==="estatisticas"){secDesenhada=null;$("pg-sec").replaceChildren(estatisticas());return}if(secDesenhada===sid)return;secDesenhada=sid;const S=SECOES.find(x=>x.id===sid);const box=$("pg-sec");
   box.replaceChildren(h("article",{class:"sec"},h("h1",{text:S.titulo}),h("p",{class:"lead",text:S.resumo}),...S.blocos.map(b=>bloco(b,sid)),
     S.fontes.length?h("section",{class:"fontes"},h("strong",{text:"Fontes"}),h("ol",null,...S.fontes.map((f,i)=>h("li",{id:"f-"+sid+"-"+(i+1)},f.t+" ",h("a",{href:f.u,target:"_blank",rel:"noopener",text:"Abrir ↗"}))))):null))}
 function abrirMenu(abrir){$("menu").hidden=!abrir;$("scrim").hidden=!abrir;$("menuBtn").setAttribute("aria-expanded",String(abrir));document.body.style.overflow=abrir?"hidden":"";if(abrir)$("menuList").querySelector("[aria-current]")?.focus()}
 function desenharMenu(){const cur=secAtual()||"provas";
   $("menuList").replaceChildren(
     h("li",null,h("a",{href:"#",onclick:e=>{e.preventDefault();history.pushState(null,"",location.pathname+location.search);abrirMenu(false);draw();window.scrollTo({top:0})},"aria-current":cur==="provas"?"page":null},h("span",{class:"ic",text:"◆"}),"Provas")),
-    ...(ONLINE?[h("li",{class:"sep"}),h("li",{class:"lbl",text:"Grupos"}),
+    ...(ONLINE?[h("li",{class:"sep"}),h("li",null,h("a",{href:"#s=estatisticas",onclick:()=>abrirMenu(false),"aria-current":cur==="estatisticas"?"page":null},h("span",{class:"ic",text:"▥"}),"Estatísticas")),h("li",{class:"lbl",text:"Grupos"}),
       ...gruposConhecidos().map(g=>h("li",null,h("a",{href:"#",onclick:e=>{e.preventDefault();abrirMenu(false);history.pushState(null,"",location.pathname);if(g.c!==grupo)mudarGrupo(g.c);else draw()},"aria-current":g.c===grupo?"true":null},h("span",{class:"ic",text:g.c===grupo?"●":"○"}),g.n||"Grupo sem nome"))),
       h("li",null,h("a",{href:"#",onclick:e=>{e.preventDefault();abrirMenu(false);history.pushState(null,"",location.pathname);entrarAberto=true;draw();window.scrollTo({top:0});$("criarNome").focus()}},h("span",{class:"ic",text:"+"}),"Criar ou entrar noutro grupo"))]:[]),
     h("li",{class:"sep"}),
