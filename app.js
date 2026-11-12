@@ -19,6 +19,9 @@ let tab=store.get("dorsal.tab")||"grupo",openMsg=null,confirmDel=null;
 function lerCodigo(txt){const t=String(txt||"").trim();const m=t.match(/[?&#]g=([a-z0-9]{6,40})/i);if(m)return m[1].toLowerCase();if(/^[a-z0-9]{6,40}$/i.test(t))return t.toLowerCase();return null}
 (function(){const c=lerCodigo(location.search)||lerCodigo(location.hash);if(c)store.set("dorsal.grupo",c);grupo=store.get("dorsal.grupo")})();
 function chaveMe(){return "dorsal.membro."+grupo}
+function provaAberta(){const m=location.hash.match(/[#&]p=([^&]+)/);return m?decodeURIComponent(m[1]):null}
+function abrir(pid){openMsg=null;location.hash="p="+encodeURIComponent(pid)}
+function fechar(){if(history.state&&history.state.dorsal)history.back();else{history.replaceState(null,"",location.pathname+location.search);draw()}}
 
 // ---------- servidor ----------
 async function api(path,opt={}){
@@ -95,25 +98,57 @@ async function remover(pid){if(confirmDel!==pid){confirmDel=pid;draw();return}co
   try{await api("provas?id=eq."+encodeURIComponent(pid),{method:"DELETE"});provas=provas.filter(p=>p.id!==pid);draw();toast("Prova removida")}catch(e){toast("Não foi possível remover.")}}
 
 // ---------- desenho ----------
-function card(p){const d=parseD(p.data),q=quem(p.id),mine=pres[p.id]&&pres[p.id][me];
+function segDe(p){const mine=pres[p.id]&&pres[p.id][me];return podeMarcar()?h("div",{class:"seg",role:"group","aria-label":"A tua presença"},...ESTADOS.map(([k,l])=>h("button",{class:k,"aria-pressed":String(mine===k),onclick:()=>setEstado(p.id,k),text:l}))):null}
+function msgDe(p){if(openMsg!==p.id)return null;const txt=mensagem(p),ta=h("textarea",{readonly:true,"aria-label":"Mensagem para o WhatsApp"});ta.value=txt;
+  return h("div",{class:"msg"},ta,h("div",{class:"row"},h("button",{class:"btn primary small",onclick:()=>copiar(txt,ta),text:"Copiar"}),h("a",{class:"btn small",href:"https://wa.me/?text="+encodeURIComponent(txt),target:"_blank",rel:"noopener",text:"Abrir no WhatsApp"})))}
+function contagem(q){const parts=[];if(q.inscrito.length)parts.push(q.inscrito.length+(q.inscrito.length===1?" inscrito":" inscritos"));if(q.vou.length)parts.push(q.vou.length+(q.vou.length===1?" vai":" vão"));if(q.talvez.length)parts.push(q.talvez.length+" talvez");return parts.join(" · ")}
+function card(p){const d=parseD(p.data),q=quem(p.id);
   const people=h("div",{class:"people"},...ESTADOS.flatMap(([k,l])=>q[k].map(id=>h("span",{class:"p "+k,title:l,text:nomeDe(id)+(k==="inscrito"?" ✓":"")}))));
-  const seg=podeMarcar()?h("div",{class:"seg",role:"group","aria-label":"A tua presença"},...ESTADOS.map(([k,l])=>h("button",{class:k,"aria-pressed":String(mine===k),onclick:()=>setEstado(p.id,k),text:l}))):null;
+  const seg=segDe(p);
   const insc=valid(p.inscricao),info=valid(p.info);
   const links=h("div",{class:"links"},
     insc?h("a",{href:insc,target:"_blank",rel:"noopener",onclick:()=>cliqueInsc(p.id),text:"Inscrição ↗"}):h("span",{class:"hint",text:"Sem link de inscrição"}),
     info?h("a",{href:info,target:"_blank",rel:"noopener",text:"Informação ↗"}):null,
+    h("button",{class:"linkbtn",onclick:()=>abrir(p.id),text:ONLINE&&grupo?"Quem vai"+(temGente(p.id)?" ("+contagem(q)+")":""):"Abrir prova"}),
     h("button",{class:"linkbtn",onclick:()=>{openMsg=openMsg===p.id?null:p.id;draw()},text:openMsg===p.id?"Fechar mensagem":"Mensagem para o grupo"}),
     (podeMarcar()&&p.grupo&&p.grupo===grupo)?h("button",{class:"linkbtn",onclick:()=>remover(p.id),text:confirmDel===p.id?"Confirmar remoção":"Remover"}):null);
-  let msg=null;if(openMsg===p.id){const txt=mensagem(p),ta=h("textarea",{readonly:true,"aria-label":"Mensagem para o WhatsApp"});ta.value=txt;
-    msg=h("div",{class:"msg"},ta,h("div",{class:"row"},h("button",{class:"btn primary small",onclick:()=>copiar(txt,ta),text:"Copiar"}),h("a",{class:"btn small",href:"https://wa.me/?text="+encodeURIComponent(txt),target:"_blank",rel:"noopener",text:"Abrir no WhatsApp"})))}
+  const msg=msgDe(p);
   const n=cliques[p.id]||0;
   return h("article",{class:"card"},
     h("div",{class:"bib","aria-label":dataLonga(p.data)},h("div",{class:"d",text:d.getDate()}),h("div",{class:"m",text:MESES[d.getMonth()].slice(0,3)}),h("div",{class:"w",text:DIAS[d.getDay()]})),
-    h("div",{class:"info"},h("h3",{text:p.nome}),
+    h("div",{class:"info"},h("h3",null,h("button",{class:"titlebtn",onclick:()=>abrir(p.id),text:p.nome})),
       h("div",{class:"meta"},h("strong",{text:[p.concelho,p.distrito].filter(Boolean).join(", ")||"Local por confirmar"}),"  ·  "+faltam(p.data)+(p.nota?"  ·  "+p.nota:"")),
       p.distancias?h("div",{class:"dist"},...String(p.distancias).split(",").map(s=>s.trim()).filter(Boolean).map(s=>h("span",{text:s}))):null,
       people.childNodes.length?people:null,seg,links,msg,
       n?h("div",{class:"owner",text:n+(n===1?" clique":" cliques")+" do grupo no link de inscrição"}):null))}
+function detalhe(pid){const box=$("view-prova");box.replaceChildren();
+  const voltar=h("button",{class:"back",onclick:fechar,text:"← Provas"});
+  const p=provas.find(x=>x.id===pid);
+  if(!p){box.append(voltar,h("div",{class:"empty",text:loaded?"Esta prova já não está no calendário.":"A carregar…"}));return}
+  const d=parseD(p.data),q=quem(p.id),insc=valid(p.inscricao),info=valid(p.info);
+  const pessoa=(id,k)=>h("li",{class:"pessoa "+k},h("span",{class:"nome",text:nomeDe(id)+(id===me?" (tu)":"")}));
+  const bloco=(k,titulo,ids,vazio)=>h("section",{class:"grupo-bloco "+k},h("h3",null,titulo+" ",h("span",{class:"n",text:String(ids.length)})),
+    ids.length?h("ul",{class:"pessoas"},...ids.map(id=>pessoa(id,k))):h("p",{class:"hint",text:vazio}));
+  let gente;
+  if(!ONLINE)gente=h("div",{class:"notice"},h("p",{text:"A lista de quem está inscrito aparece quando a app estiver ligada ao servidor do grupo."}));
+  else if(!grupo)gente=h("div",{class:"notice"},h("p",{text:"Entra no grupo para veres quem está inscrito nesta prova."}));
+  else{const marcados=new Set([...q.inscrito,...q.vou,...q.talvez]);const falta=Object.keys(membros).filter(id=>!marcados.has(id)).sort((a,b)=>nomeDe(a).localeCompare(nomeDe(b),"pt"));
+    gente=h("div",{class:"gente"},
+      bloco("inscrito","Inscritos",q.inscrito,"Ninguém do grupo está inscrito ainda."),
+      bloco("vou","Vão, ainda sem inscrição",q.vou,"Ninguém."),
+      q.talvez.length?bloco("talvez","Talvez",q.talvez,""):null,
+      falta.length?h("details",{class:"falta"},h("summary",{text:"Ainda não marcaram ("+falta.length+")"}),h("p",{class:"hint",text:falta.map(nomeDe).join(", ")})):null)}
+  box.append(voltar,h("article",{class:"detalhe"},
+    h("div",{class:"card"},
+      h("div",{class:"bib","aria-label":dataLonga(p.data)},h("div",{class:"d",text:d.getDate()}),h("div",{class:"m",text:MESES[d.getMonth()].slice(0,3)}),h("div",{class:"w",text:DIAS[d.getDay()]})),
+      h("div",{class:"info"},h("h2",{class:"titulo",text:p.nome}),
+        h("div",{class:"meta"},h("strong",{text:[p.concelho,p.distrito].filter(Boolean).join(", ")||"Local por confirmar"}),"  ·  "+dataLonga(p.data)+", "+faltam(p.data)+(p.nota?"  ·  "+p.nota:"")),
+        p.distancias?h("div",{class:"dist"},...String(p.distancias).split(",").map(s=>s.trim()).filter(Boolean).map(s=>h("span",{text:s}))):null,
+        h("div",{class:"links"},insc?h("a",{href:insc,target:"_blank",rel:"noopener",onclick:()=>cliqueInsc(p.id),text:"Inscrição ↗"}):h("span",{class:"hint",text:"Sem link de inscrição"}),info?h("a",{href:info,target:"_blank",rel:"noopener",text:"Informação ↗"}):null))),
+    podeMarcar()?h("div",{class:"eu"},h("span",{class:"hint",text:"A tua presença"}),segDe(p)):null,
+    gente,
+    h("div",{class:"links"},h("button",{class:"linkbtn",onclick:()=>{openMsg=openMsg===p.id?null:p.id;draw()},text:openMsg===p.id?"Fechar mensagem":"Mensagem para o grupo"})),
+    msgDe(p)))}
 function listaPorMes(ps,box,vazio){box.replaceChildren();if(!ps.length){box.append(h("div",{class:"empty",text:vazio}));return}
   let cur="",list=null;for(const p of ps){const d=parseD(p.data),k=MESES[d.getMonth()]+" "+d.getFullYear();if(k!==cur){cur=k;box.append(h("h2",{class:"month",text:k}));list=h("div",{class:"list"});box.append(list)}list.append(card(p))}}
 function fillSel(sel,first,opts){const v=sel.value,key=JSON.stringify(opts);if(sel.dataset.k===key)return;sel.dataset.k=key;sel.replaceChildren(h("option",{value:"",text:first}),...opts.map(([v,t])=>h("option",{value:v,text:t})));if(opts.some(o=>o[0]===v))sel.value=v}
@@ -124,7 +159,10 @@ function draw(){
   if(!$("quem").hidden){$("nomes").replaceChildren(...Object.entries(membros).sort((a,b)=>a[1].localeCompare(b[1],"pt")).map(([id,n])=>h("button",{type:"button",onclick:()=>{me=id;store.set(chaveMe(),id);draw()},text:n})))}
   $("meBtn").hidden=!me;$("meBtn").textContent=me?(grupoNome?grupoNome+" · ":"")+nomeDe(me):"";
   $("partilhar").hidden=!(ONLINE&&grupo);$("sair").hidden=!me;
+  const aberta=provaAberta();
+  $("lista").hidden=!!aberta;$("view-prova").hidden=!aberta;
   for(const t of ["grupo","todas","nova"]){$("tab-"+t).setAttribute("aria-selected",String(tab===t));$("view-"+t).hidden=tab!==t}
+  if(aberta)detalhe(aberta);
   const fut=futuras();const grp=fut.filter(p=>temGente(p.id));
   $("nGrupo").textContent=loaded?grp.length:"";$("nTodas").textContent=loaded?fut.length:"";
   if(!loaded){$("view-grupo").replaceChildren(h("div",{class:"empty",text:"A carregar as provas…"}));return}
@@ -158,6 +196,8 @@ $("novaForm").addEventListener("submit",async e=>{e.preventDefault();if(!podeMar
   try{await api("provas",{method:"POST",prefer:"return=minimal",body});$("novaForm").reset();$("novaMsg").textContent="";toast("Prova acrescentada");tab="todas";await carregar()}
   catch(err){$("novaMsg").textContent=err.status===409?"Essa prova já existe nessa data.":"Não foi possível guardar. Tenta outra vez."}});
 
+let ultimaAberta=provaAberta();
+window.addEventListener("hashchange",()=>{const a=provaAberta();if(a&&!ultimaAberta)history.replaceState({dorsal:1},"");ultimaAberta=a;draw();window.scrollTo({top:0})});
 draw();carregar();
 setInterval(()=>{if(document.visibilityState==="visible"&&ONLINE)carregar()},30000);
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&ONLINE&&loaded)carregar()});
