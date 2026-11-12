@@ -271,6 +271,46 @@ function estatisticas(){const box=h("article",{class:"sec est"});const anoAtual=
   box.append(h("p",{class:"hint",text:"Os números vêm dos km, D+ e tempos registados em cada prova feita (à mão ou por GPX)."}));
   return box}
 
+// ---------- imagem do resultado ----------
+function carregarImg(src){return new Promise(r=>{if(!src)return r(null);const i=new Image();i.onload=()=>r(i);i.onerror=()=>r(null);i.src=src})}
+async function partilharResultado(p,id){const x=exDe(p.id,id);toast("A preparar a imagem…");
+  let tr=null;if(temTrilho.has(p.id+"|"+id)){try{tr=(await api("trilhos?select=pontos,elev,km,dplus,duracao_s&prova_id=eq."+encodeURIComponent(p.id)+"&membro_id=eq."+id))[0]||null}catch(_){}}
+  const W=1080,H=1350,c=document.createElement("canvas");c.width=W;c.height=H;const g=c.getContext("2d");
+  const fam=getComputedStyle(document.documentElement).getPropertyValue("--display").trim()||"sans-serif";
+  try{await document.fonts.load("700 80px "+fam.split(",")[0])}catch(_){}
+  const fundo=g.createLinearGradient(0,0,0,H);fundo.addColorStop(0,"#17211b");fundo.addColorStop(1,"#0e1510");g.fillStyle=fundo;g.fillRect(0,0,W,H);
+  g.fillStyle="#ee5a0f";for(let i=-H;i<W;i+=56){g.beginPath();g.moveTo(i,0);g.lineTo(i+28,0);g.lineTo(i+28-18,18);g.lineTo(i-18,18);g.fill()}
+  const [logo,glogo]=await Promise.all([carregarImg("icons/dorsal-v2.svg"),carregarImg(grupoLogo)]);
+  if(logo)g.drawImage(logo,72,72,72,72);g.fillStyle="#fff";g.font="700 52px "+fam;g.textBaseline="middle";g.fillText("DORSAL",160,110);
+  if(glogo){g.save();g.beginPath();g.arc(W-108,108,36,0,7);g.clip();g.drawImage(glogo,W-144,72,72,72);g.restore()}
+  if(grupoNome){g.font="600 30px "+fam;g.textAlign="right";g.fillStyle="#cfd8cf";g.fillText(grupoNome.toUpperCase(),W-(glogo?160:72),110);g.textAlign="left"}
+  // título com quebra de linha
+  g.fillStyle="#fff";g.font="700 92px "+fam;g.textBaseline="alphabetic";const pal=p.nome.toUpperCase().split(/\s+/),linhas=[];let l="";
+  for(const w of pal){const t=l?l+" "+w:w;if(g.measureText(t).width>W-144&&l){linhas.push(l);l=w}else l=t}linhas.push(l);let y=260;
+  for(const ln of linhas.slice(0,3)){g.fillText(ln,72,y);y+=92}
+  g.font="500 36px "+fam;g.fillStyle="#ee5a0f";g.fillText([dataLonga(p.data),[p.concelho,p.distrito].filter(Boolean).join(", "),x.percurso].filter(Boolean).join("  ·  "),72,y+4);
+  // traçado
+  const area={x:72,y:y+50,w:W-144,h:400};
+  if(tr&&tr.pontos){const pts=DorsalGPX.descodificar(tr.pontos);if(pts.length>1){const la=pts.map(q=>q[0]),lo=pts.map(q=>q[1]),k=Math.cos((Math.min(...la)+Math.max(...la))/2*Math.PI/180);
+    const dx=(Math.max(...lo)-Math.min(...lo))*k||1e-6,dy=(Math.max(...la)-Math.min(...la))||1e-6,sc=Math.min(area.w/dx,area.h/dy),ox=area.x+(area.w-dx*sc)/2,oy=area.y+(area.h-dy*sc)/2;
+    g.lineJoin="round";g.lineCap="round";g.beginPath();pts.forEach((q,i)=>{const px=ox+(q[1]-Math.min(...lo))*k*sc,py=oy+(Math.max(...la)-q[0])*sc;i?g.lineTo(px,py):g.moveTo(px,py)});
+    g.strokeStyle="rgba(238,90,15,.25)";g.lineWidth=22;g.stroke();g.strokeStyle="#ee5a0f";g.lineWidth=8;g.stroke()}}
+  // números
+  const km=+x.km||(tr&&+tr.km)||0,dp=+x.dplus||(tr&&+tr.dplus)||0,sg=segDeTempo(x.tempo)||(tr&&tr.duracao_s)||0;
+  const st=[[km?fmtKm(km):"—","KM"],[dp?String(dp):"—","M D+"],[sg?(x.tempo||hms(sg)):"—","TEMPO"]];if(sg&&km>=1)st.push([ritmo(sg/km,1).replace(" /km",""),"MIN/KM"]);
+  const sy=area.y+area.h+(tr&&tr.elev?40:0),cw=(W-144)/st.length;
+  let fs=110;g.font="700 "+fs+"px "+fam;while(fs>40&&st.some(([v])=>g.measureText(v).width>cw-28)){fs-=4;g.font="700 "+fs+"px "+fam}
+  st.forEach(([v,r],i)=>{const cx=72+i*cw;g.fillStyle="#fff";g.font="700 "+fs+"px "+fam;g.fillText(v,cx,sy+100);g.fillStyle="#9aa89e";g.font="600 28px "+fam;g.fillText(r,cx,sy+144)});
+  // perfil
+  if(tr&&tr.elev){const el=tr.elev.split(",").map(Number);if(el.length>1){const mn=Math.min(...el),mx=Math.max(...el),py0=H-90,ph=170,pw=W-144;
+    g.beginPath();g.moveTo(72,py0);el.forEach((e,i)=>g.lineTo(72+pw*i/(el.length-1),py0-ph*(e-mn)/Math.max(1,mx-mn)));g.lineTo(72+pw,py0);g.closePath();
+    const gr=g.createLinearGradient(0,py0-ph,0,py0);gr.addColorStop(0,"rgba(46,107,67,.9)");gr.addColorStop(1,"rgba(46,107,67,.15)");g.fillStyle=gr;g.fill()}}
+  g.fillStyle="#6f7d73";g.font="500 26px "+fam;g.fillText(nomeDe(id)+"  ·  possn.github.io/Dorsal",72,H-40);
+  const blob=await new Promise(r=>c.toBlob(r,"image/png"));const nomeF=(p.nome.normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/gi,"-").toLowerCase()||"prova")+".png";
+  const file=new File([blob],nomeF,{type:"image/png"});
+  try{if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:p.nome});return}}catch(e){if(e&&e.name==="AbortError")return}
+  const a=h("a",{href:URL.createObjectURL(blob),download:nomeF});document.body.append(a);a.click();a.remove();toast("Imagem descarregada")}
+
 // ---------- membros ----------
 const linkMembro=id=>"#s=membro&m="+id;
 const fmtKm=n=>fmtN(Math.round(n*10)/10);
@@ -300,7 +340,7 @@ function perfil(id){const box=h("article",{class:"sec est perfil"});
     if(comum||feitasJuntos)box.append(h("p",{class:"nota",text:"Contigo: "+[feitasJuntos?feitasJuntos+(feitasJuntos===1?" prova feita":" provas feitas"):"",comum?comum+(comum===1?" próxima":" próximas"):""].filter(Boolean).join(" · ")}))}
   const feitas=feitasDe(id,null).sort((a,b)=>b.data.localeCompare(a.data));
   box.append(h("h2",{text:"Provas feitas"}),feitas.length?h("ul",{class:"plist"},...feitas.map(p=>{const x=exDe(p.id,id),sg=segDeTempo(x.tempo);
-    return linhaProva(p,[x.percurso,x.km?fmtKm(+x.km)+" km":"",x.dplus?x.dplus+" m D+":"",x.tempo||"",(sg&&+x.km>=1)?ritmo(sg/ +x.km,1):"",temTrilho.has(p.id+"|"+id)?"📍 GPX":""])})):h("p",{class:"hint",text:id===me?"Regista as provas que fizeste no separador do grupo, em Provas feitas.":"Ainda não registou provas feitas."}));
+    const li=linhaProva(p,[x.percurso,x.km?fmtKm(+x.km)+" km":"",x.dplus?x.dplus+" m D+":"",x.tempo||"",(sg&&+x.km>=1)?ritmo(sg/ +x.km,1):"",temTrilho.has(p.id+"|"+id)?"📍 GPX":""]);li.append(h("button",{class:"linkbtn",type:"button",onclick:()=>partilharResultado(p,id),text:"↗ Imagem do resultado"}));return li})):h("p",{class:"hint",text:id===me?"Regista as provas que fizeste no separador do grupo, em Provas feitas.":"Ainda não registou provas feitas."}));
   if(t.n){const M=["J","F","M","A","M","J","J","A","S","O","N","D"];box.append(h("h2",{text:"Km por mês em "+ano}),barrasSVG(t.meses,M,"km","#ee5a0f"))}
   const ganhas=CONQ.filter(([, ,f])=>f(tudo));
   box.append(h("h2",{text:"Conquistas ("+ganhas.length+"/"+CONQ.length+")"}),h("ul",{class:"conquistas"},...CONQ.map(([n,d,f])=>{const ok=f(tudo);return h("li",{class:ok?"ok":null},h("span",{class:"med","aria-hidden":"true",text:ok?"★":"☆"}),h("span",null,h("strong",{text:n}),h("small",{text:d})))})));
@@ -442,7 +482,7 @@ function historico(){if(!grupo||!me)return null;const ano=String(new Date().getF
   const linha=p=>{const quem=Object.keys(pres[p.id]||{}).filter(id=>foiA(p.id,id)).sort((a,b)=>nomeDe(a).localeCompare(nomeDe(b),"pt"));const d=parseD(p.data);
     let meu=null;if(quem.includes(me)&&podeMarcar()){const x=exDe(p.id,me);
       if(editHist===p.id)meu=editarFeita(p,x,quem);
-      else meu=h("button",{class:"linkbtn",type:"button",onclick:()=>{editHist=p.id;draw()},text:"✎ Editar"})}
+      else meu=h("button",{class:"linkbtn",type:"button",onclick:()=>{editHist=p.id;draw()},text:"✎ Editar"});if(editHist!==p.id)meu=h("div",{class:"row histacts"},meu,h("button",{class:"linkbtn",type:"button",onclick:()=>partilharResultado(p,me),text:"↗ Partilhar resultado"}))}
     return h("li",{class:"hist"},h("div",{class:"hist-top"},h("span",{class:"hd",text:d.getDate()+" "+MESES[d.getMonth()].slice(0,3)+" "+d.getFullYear()}),h("button",{class:"titlebtn",onclick:()=>abrir(p.id),text:p.nome})),
       quem.length?h("div",{class:"people"},...quem.map(id=>{const x=exDe(p.id,id);return h("span",{class:"p inscrito",text:nomeDe(id)+(x.percurso?" · "+x.percurso:"")+(x.km?" · "+fmtN(+x.km)+" km":"")+(x.tempo?" · "+x.tempo:"")+(temTrilho.has(p.id+"|"+id)?" · 📍":"")})})):null,meu)};
   const lista=passadas.filter(p=>Object.keys(pres[p.id]||{}).some(id=>foiA(p.id,id)));
@@ -578,7 +618,10 @@ function draw(){
   if(!loaded){$("view-grupo").replaceChildren(h("div",{class:"empty",text:"A carregar as provas…"}));return}
   const minhas=me?fut.filter(p=>pres[p.id]&&(pres[p.id][me]==="inscrito"||pres[p.id][me]==="vou")):[];
   const banner=minhas.length?(()=>{const p=minhas[0],e=pres[p.id][me],x=exDe(p.id,me);return h("button",{type:"button",class:"proxima",onclick:()=>abrir(p.id)},
-    h("span",{class:"k",text:"A tua próxima prova"}),h("span",{class:"t",text:p.nome}),h("span",{class:"s",text:dataLonga(p.data)+" · "+faltam(p.data)+" · "+(e==="inscrito"?"inscrito":"ainda sem inscrição")+(x.percurso?" · "+x.percurso:"")}))})():null;
+    h("span",{class:"k",text:"A tua próxima prova"}),h("span",{class:"t",text:p.nome}),h("span",{class:"s",text:dataLonga(p.data)+" · "+faltam(p.data)+" · "+(e==="inscrito"?"inscrito":"ainda sem inscrição")+(x.percurso?" · "+x.percurso:"")}),
+    ...(()=>{const outros=Object.keys(pres[p.id]||{}).filter(id=>id!==me&&foiA(p.id,id)).map(nomeDe);const dias=Math.round((parseD(p.data)-hoje())/864e5);
+      if(dias>=0&&dias<=15&&coordsDe(p)&&!meteo[p.id])previsao(p);const m=meteo[p.id];
+      return [outros.length?h("span",{class:"s",text:"Contigo: "+outros.join(", ")}):null,m&&m.estado==="ok"?h("span",{class:"s mt",text:(METEO[m.cod]||"")+" · "+Math.round(m.min)+"–"+Math.round(m.max)+" °C"+(m.chuva!=null?" · chuva "+m.chuva+"%":"")}):null].filter(Boolean)})())})():null;
   listaPorMes(grp,$("view-grupo"),podeMarcar()?"Ainda ninguém marcou presença. Vai a Todas e carrega em Vou, Inscrito ou Talvez.":"Quando entrares no grupo, aqui aparecem as provas a que o grupo vai.");
   {const ma=meuAno();if(ma)$("view-grupo").prepend(ma)}
   {const ids=Object.keys(novas).filter(k=>novas[k]);if(ids.length){const todasP=[...provas,...passadas];$("view-grupo").prepend(h("div",{class:"novasbox"},h("strong",{text:"💬 Mensagens novas"}),...ids.map(pid=>{const pp=todasP.find(x=>x.id===pid);return pp?h("button",{type:"button",class:"linkbtn",onclick:()=>abrir(pid),text:pp.nome+" ("+novas[pid]+")"}):null})))}}
