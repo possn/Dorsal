@@ -5,6 +5,7 @@ const ONLINE=!!(CFG.supabaseUrl&&CFG.supabaseAnonKey);
 const DISTRITOS=["Aveiro","Beja","Braga","Bragança","Castelo Branco","Coimbra","Évora","Faro","Guarda","Leiria","Lisboa","Portalegre","Porto","Santarém","Setúbal","Viana do Castelo","Vila Real","Viseu","Açores","Madeira"];
 const MESES=["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
 const DIAS=["domingo","segunda","terça","quarta","quinta","sexta","sábado"];
+const REGIOES=[["norte","Norte",["Viana do Castelo","Braga","Porto","Vila Real","Bragança"]],["centro","Centro",["Aveiro","Viseu","Guarda","Coimbra","Castelo Branco","Leiria"]],["lisboa","Lisboa e Vale do Tejo",["Lisboa","Santarém","Setúbal"]],["alentejo","Alentejo",["Portalegre","Évora","Beja"]],["algarve","Algarve",["Faro"]],["ilhas","Açores e Madeira",["Açores","Madeira"]]];
 const ESTADOS=[["inscrito","Inscrito"],["vou","Vou"],["talvez","Talvez"]];
 const $=id=>document.getElementById(id);
 function h(tag,attrs,...kids){const el=document.createElement(tag);if(attrs)for(const[k,v]of Object.entries(attrs)){if(v==null||v===false)continue;if(k==="class")el.className=v;else if(k==="text")el.textContent=v;else if(k.startsWith("on"))el.addEventListener(k.slice(2),v);else el.setAttribute(k,v===true?"":v)}for(const c of kids.flat()){if(c==null||c===false)continue;el.append(c.nodeType?c:document.createTextNode(String(c)))}return el}
@@ -13,6 +14,7 @@ const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},se
 // ---------- estado ----------
 let grupo=null,grupoNome="",grupoLogo="",me=null;
 let provas=[],membros={},pres={},cliques={},loaded=false;
+let filtroReg=store.get("dorsal.regiao")||"",filtroDist=store.get("dorsal.distrito")||"";
 let tab=store.get("dorsal.tab")||"grupo",openMsg=null,confirmDel=null;
 
 // ---------- código do grupo ----------
@@ -161,8 +163,8 @@ function draw(){
   if(!$("quem").hidden){$("nomes").replaceChildren(...Object.entries(membros).sort((a,b)=>a[1].localeCompare(b[1],"pt")).map(([id,n])=>h("button",{type:"button",onclick:()=>{me=id;store.set(chaveMe(),id);draw()},text:n})))}
   $("meBtn").hidden=!me;
   if(me){const logoOk=/^data:image\/(png|jpeg|webp);base64,/.test(grupoLogo);
-    $("meBtn").replaceChildren(logoOk?h("img",{class:"glogo",src:grupoLogo,alt:"",width:"30",height:"30"}):null,
-      h("span",{class:"gtxt"},grupoNome?h("span",{class:"gnome",text:grupoNome}):null,h("span",{class:"pnome",text:nomeDe(me)})));
+    $("meBtn").replaceChildren(...[logoOk?h("img",{class:"glogo",src:grupoLogo,alt:"",width:"30",height:"30"}):null,
+      h("span",{class:"gtxt"},grupoNome?h("span",{class:"gnome",text:grupoNome}):null,h("span",{class:"pnome",text:nomeDe(me)}))].filter(Boolean));
     $("meBtn").setAttribute("aria-label",(grupoNome?grupoNome+", ":"")+nomeDe(me))}
   $("partilhar").hidden=!(ONLINE&&grupo);$("sair").hidden=!me;$("editarBtn").hidden=!podeMarcar();
   const aberta=provaAberta();
@@ -173,10 +175,15 @@ function draw(){
   $("nGrupo").textContent=loaded?grp.length:"";$("nTodas").textContent=loaded?fut.length:"";
   if(!loaded){$("view-grupo").replaceChildren(h("div",{class:"empty",text:"A carregar as provas…"}));return}
   listaPorMes(grp,$("view-grupo"),podeMarcar()?"Ainda ninguém marcou presença. Vai a Todas e carrega em Vou, Inscrito ou Talvez.":"Quando entrares no grupo, aqui aparecem as provas a que o grupo vai.");
+  const reg=REGIOES.find(r=>r[0]===filtroReg),naReg=p=>!reg||reg[2].includes(p.distrito);
+  $("regioes").replaceChildren(...[["","Todo o país",null],...REGIOES].map(([id,nome])=>{const n=id?fut.filter(p=>REGIOES.find(r=>r[0]===id)[2].includes(p.distrito)).length:fut.length;
+    return h("button",{type:"button",class:"chip-reg","aria-pressed":String(filtroReg===id),onclick:()=>{filtroReg=id;filtroDist="";store.set("dorsal.regiao",id||null);store.set("dorsal.distrito",null);$("fDistrito").value="";draw()}},nome+" ",h("span",{class:"n",text:String(n)}))}));
+  {const sel=$("regioes").querySelector('[aria-pressed="true"]');if(sel&&filtroReg&&!$("view-todas").hidden)requestAnimationFrame(()=>{const r=$("regioes");r.scrollLeft=sel.offsetLeft-r.offsetLeft-8})}
+  fillSel($("fDistrito"),reg?"Todos os distritos de "+(reg[0]==="ilhas"?"Açores e Madeira":reg[1]):"Todos os distritos",[...new Set(fut.filter(naReg).map(p=>p.distrito).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"pt")).map(x=>[x,x]));
+  if(filtroDist&&[...$("fDistrito").options].some(o=>o.value===filtroDist))$("fDistrito").value=filtroDist;
   const q=$("q").value.trim().toLowerCase(),fd=$("fDistrito").value,fm=$("fMes").value;
-  const todas=fut.filter(p=>(!fd||p.distrito===fd)&&(!fm||p.data.slice(0,7)===fm)&&(!q||[p.nome,p.concelho,p.distrito].join(" ").toLowerCase().includes(q)));
+  const todas=fut.filter(p=>naReg(p)&&(!fd||p.distrito===fd)&&(!fm||p.data.slice(0,7)===fm)&&(!q||[p.nome,p.concelho,p.distrito].join(" ").toLowerCase().includes(q)));
   listaPorMes(todas,$("todasList"),fut.length?"Nenhuma prova com estes filtros.":"Ainda não há provas.");
-  fillSel($("fDistrito"),"Todos os distritos",[...new Set(fut.map(p=>p.distrito).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"pt")).map(x=>[x,x]));
   fillSel($("fMes"),"Todos os meses",[...new Set(fut.map(p=>p.data.slice(0,7)))].sort().map(m=>[m,MESES[+m.slice(5)-1]+" "+m.slice(0,4)]));
   $("view-nova").querySelectorAll("input,select,button").forEach(el=>el.disabled=!podeMarcar());
   if(!$("resumo").hidden)$("resumoText").value=resumo();
@@ -246,7 +253,8 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("menu").hidden)a
 
 // ---------- eventos ----------
 document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{tab=b.dataset.tab;store.set("dorsal.tab",tab);draw()}));
-["q","fDistrito","fMes"].forEach(id=>$(id).addEventListener("input",draw));
+["q","fMes"].forEach(id=>$(id).addEventListener("input",draw));
+$("fDistrito").addEventListener("input",()=>{filtroDist=$("fDistrito").value;store.set("dorsal.distrito",filtroDist||null);draw()});
 $("resumoBtn").addEventListener("click",()=>{const r=$("resumo");r.hidden=!r.hidden;if(!r.hidden){const t=resumo();$("resumoText").value=t;$("resumoWa").href="https://wa.me/?text="+encodeURIComponent(t)}});
 $("resumoCopy").addEventListener("click",()=>copiar($("resumoText").value,$("resumoText")));
 $("codigoForm").addEventListener("submit",e=>{e.preventDefault();const c=lerCodigo($("codigo").value)||lerCodigo("?g="+$("codigo").value.trim());if(!c){$("codigoMsg").textContent="Não reconheci esse link ou código.";return}grupo=c;store.set("dorsal.grupo",c);loaded=false;draw();carregar()});
