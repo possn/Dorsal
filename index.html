@@ -31,13 +31,20 @@
   <p class="sub">Quem do grupo vai a que prova, com o link de inscrição à mão.</p>
 
   <section id="entrar" class="panel" hidden>
-    <h2>Entrar no grupo</h2>
-    <p>Abre o link que recebeste no WhatsApp, ou cola aqui o link ou o código do grupo.</p>
+    <div class="row between"><h2>Entrar num grupo</h2><button class="linkbtn" id="entrarX" type="button" hidden>Cancelar</button></div>
+    <p>Abre o link que recebeste, ou cola aqui o link ou o código do grupo.</p>
     <form id="codigoForm" class="inline">
       <input id="codigo" autocomplete="off" placeholder="Link ou código do grupo" aria-label="Link ou código do grupo">
       <button class="btn primary" type="submit">Entrar</button>
     </form>
     <p class="hint" id="codigoMsg"></p>
+    <h2 class="sub2">Ou criar um grupo novo</h2>
+    <p>Para a tua equipa, clube ou amigos. Depois convidas os outros com um link.</p>
+    <form id="criarForm" class="inline">
+      <input id="criarNome" maxlength="40" autocomplete="off" placeholder="Nome do grupo" aria-label="Nome do grupo novo">
+      <button class="btn primary" type="submit">Criar grupo</button>
+    </form>
+    <p class="hint" id="criarMsg"></p>
   </section>
 
   <section id="quem" class="panel" hidden>

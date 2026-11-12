@@ -24,7 +24,14 @@ let tab=store.get("dorsal.tab")||"grupo",openMsg=null,confirmDel=null;
 
 // ---------- código do grupo ----------
 function lerCodigo(txt){const t=String(txt||"").trim();const m=t.match(/[?&#]g=([a-z0-9]{6,40})/i);if(m)return m[1].toLowerCase();if(/^[a-z0-9]{6,40}$/i.test(t))return t.toLowerCase();return null}
-(function(){const c=lerCodigo(location.search)||lerCodigo(location.hash);if(c)store.set("dorsal.grupo",c);grupo=store.get("dorsal.grupo")})();
+(function(){const c=lerCodigo(location.search)||lerCodigo(location.hash);if(c){store.set("dorsal.grupo",c);try{history.replaceState(history.state,"",location.pathname+location.hash)}catch(_){}}grupo=store.get("dorsal.grupo")})();
+let entrarAberto=false;
+function gruposConhecidos(){try{return JSON.parse(store.get("dorsal.grupos")||"[]")}catch(_){return[]}}
+function lembrarGrupo(c,n){const l=gruposConhecidos().filter(x=>x.c!==c);l.unshift({c,n:n||""});store.set("dorsal.grupos",JSON.stringify(l.slice(0,20)))}
+function esquecerGrupo(c){store.set("dorsal.grupos",JSON.stringify(gruposConhecidos().filter(x=>x.c!==c)))}
+function mudarGrupo(c){grupo=c;store.set("dorsal.grupo",c);me=c?store.get("dorsal.membro."+c):null;membros={};pres={};extra={};cliques={};grupoNome="";grupoLogo="";
+  const k=store.get("dorsal.cache."+c);if(k){try{const o=JSON.parse(k);membros=o.membros||{};pres=o.pres||{};extra=o.extra||{};grupoNome=o.grupoNome||"";grupoLogo=o.grupoLogo||""}catch(_){}}
+  entrarAberto=false;status("");draw();window.scrollTo({top:0});carregar()}
 function chaveMe(){return "dorsal.membro."+grupo}
 function provaAberta(){const m=location.hash.match(/[#&]p=([^&]+)/);return m?decodeURIComponent(m[1]):null}
 function abrir(pid){openMsg=null;location.hash="p="+encodeURIComponent(pid)}
@@ -52,16 +59,16 @@ async function carregar(){
     const [ps,gs,ms,pr,cl]=await Promise.all(reqs);
     provas=ps||[];
     if(grupo){
-      if(!gs||!gs.length){status("Esse código de grupo não existe. Confirma o link que recebeste.");store.set("dorsal.grupo",null);grupo=null;membros={};pres={};}
-      else{grupoNome=gs[0].nome||"";grupoLogo=gs[0].logo||"";membros={};for(const m of ms||[])membros[m.id]=m.nome;
+      if(!gs||!gs.length){status("Esse código de grupo não existe. Confirma o link que recebeste.");esquecerGrupo(grupo);store.set("dorsal.grupo",null);grupo=null;membros={};pres={};}
+      else{grupoNome=gs[0].nome||"";grupoLogo=gs[0].logo||"";lembrarGrupo(grupo,grupoNome);membros={};for(const m of ms||[])membros[m.id]=m.nome;
         pres={};extra={};for(const x of pr||[]){(pres[x.prova_id]=pres[x.prova_id]||{})[x.membro_id]=x.estado;(extra[x.prova_id]=extra[x.prova_id]||{})[x.membro_id]={percurso:x.percurso||"",boleia:x.boleia||"",lugares:x.lugares||0}}
         cliques={};for(const c of cl||[])cliques[c.prova_id]=(cliques[c.prova_id]||0)+1;
         me=store.get(chaveMe());if(me&&!membros[me]){me=null;store.set(chaveMe(),null)}
         if($("statusText").textContent.startsWith("Sem ligação"))status("");}
     }
-    store.set("dorsal.cache",JSON.stringify({provas,membros,pres,extra,grupoNome,grupoLogo}));
+    store.set("dorsal.cache."+(grupo||"-"),JSON.stringify({provas,membros,pres,extra,grupoNome,grupoLogo}));
   }catch(e){
-    const c=store.get("dorsal.cache");if(c){try{const o=JSON.parse(c);provas=o.provas||[];membros=o.membros||{};pres=o.pres||{};extra=o.extra||{};grupoNome=o.grupoNome||"";grupoLogo=o.grupoLogo||""}catch(_){}}
+    const c=store.get("dorsal.cache."+(grupo||"-"))||store.get("dorsal.cache");if(c){try{const o=JSON.parse(c);provas=o.provas||[];membros=o.membros||{};pres=o.pres||{};extra=o.extra||{};grupoNome=o.grupoNome||"";grupoLogo=o.grupoLogo||""}catch(_){}}
     else{try{provas=await (await fetch("provas.json")).json()}catch(_){}}
     status("Sem ligação ao servidor. Estás a ver a última versão guardada.");
   }
@@ -216,7 +223,7 @@ function fillSel(sel,first,opts){const v=sel.value,key=JSON.stringify(opts);if(s
 function draw(){
   const sec=secAtual();$("pg-sec").hidden=!sec;$("pg-provas").hidden=!!sec;desenharMenu();
   if(sec)desenharSec(sec);else secDesenhada=null;
-  $("entrar").hidden=!(ONLINE&&!grupo);
+  $("entrar").hidden=!(ONLINE&&(!grupo||entrarAberto));$("entrarX").hidden=!grupo;
   $("quem").hidden=!(ONLINE&&grupo&&loaded&&!me);
   if(!$("quem").hidden){$("nomes").replaceChildren(...Object.entries(membros).sort((a,b)=>a[1].localeCompare(b[1],"pt")).map(([id,n])=>h("button",{type:"button",onclick:()=>{me=id;store.set(chaveMe(),id);draw()},text:n})))}
   $("meBtn").hidden=!me;
@@ -319,6 +326,9 @@ function abrirMenu(abrir){$("menu").hidden=!abrir;$("scrim").hidden=!abrir;$("me
 function desenharMenu(){const cur=secAtual()||"provas";
   $("menuList").replaceChildren(
     h("li",null,h("a",{href:"#",onclick:e=>{e.preventDefault();history.pushState(null,"",location.pathname+location.search);abrirMenu(false);draw();window.scrollTo({top:0})},"aria-current":cur==="provas"?"page":null},h("span",{class:"ic",text:"◆"}),"Provas")),
+    ...(ONLINE?[h("li",{class:"sep"}),h("li",{class:"lbl",text:"Grupos"}),
+      ...gruposConhecidos().map(g=>h("li",null,h("a",{href:"#",onclick:e=>{e.preventDefault();abrirMenu(false);history.pushState(null,"",location.pathname);if(g.c!==grupo)mudarGrupo(g.c);else draw()},"aria-current":g.c===grupo?"true":null},h("span",{class:"ic",text:g.c===grupo?"●":"○"}),g.n||"Grupo sem nome"))),
+      h("li",null,h("a",{href:"#",onclick:e=>{e.preventDefault();abrirMenu(false);history.pushState(null,"",location.pathname);entrarAberto=true;draw();window.scrollTo({top:0});$("criarNome").focus()}},h("span",{class:"ic",text:"+"}),"Criar ou entrar noutro grupo"))]:[]),
     h("li",{class:"sep"}),
     ...SECOES.map(x=>h("li",null,h("a",{href:"#s="+x.id,onclick:()=>abrirMenu(false),"aria-current":cur===x.id?"page":null},h("span",{class:"ic",text:x.icone}),x.titulo))))}
 $("menuBtn").addEventListener("click",()=>abrirMenu(true));
@@ -338,7 +348,14 @@ $("casaIn").addEventListener("change",()=>{const v=$("casaIn").value,m=v.match(/
 $("fDistrito").addEventListener("input",()=>{filtroDist=$("fDistrito").value;store.set("dorsal.distrito",filtroDist||null);draw()});
 $("resumoBtn").addEventListener("click",()=>{const r=$("resumo");r.hidden=!r.hidden;if(!r.hidden){const t=resumo();$("resumoText").value=t;$("resumoWa").href="https://wa.me/?text="+encodeURIComponent(t)}});
 $("resumoCopy").addEventListener("click",()=>copiar($("resumoText").value,$("resumoText")));
-$("codigoForm").addEventListener("submit",e=>{e.preventDefault();const c=lerCodigo($("codigo").value)||lerCodigo("?g="+$("codigo").value.trim());if(!c){$("codigoMsg").textContent="Não reconheci esse link ou código.";return}grupo=c;store.set("dorsal.grupo",c);loaded=false;draw();carregar()});
+$("entrarX").addEventListener("click",()=>{entrarAberto=false;draw()});
+$("criarForm").addEventListener("submit",async e=>{e.preventDefault();const nome=$("criarNome").value.trim().slice(0,40);if(!nome){$("criarMsg").textContent="Escreve o nome do grupo.";return}
+  const b=$("criarForm").querySelector("button");b.disabled=true;$("criarMsg").textContent="A criar…";
+  try{const c=await api("rpc/criar_grupo",{method:"POST",body:{p_nome:nome}});if(typeof c!=="string"||!/^[a-z0-9]{6,40}$/.test(c))throw 0;
+    $("criarNome").value="";$("criarMsg").textContent="";lembrarGrupo(c,nome);mudarGrupo(c);toast("Grupo criado. Junta-te com o teu nome e depois convida os outros.")}
+  catch(err){$("criarMsg").textContent=err&&err.status===400?"Demasiados grupos criados há pouco. Tenta mais tarde.":"Não foi possível criar o grupo. Tenta outra vez."}
+  finally{b.disabled=false}});
+$("codigoForm").addEventListener("submit",e=>{e.preventDefault();const c=lerCodigo($("codigo").value)||lerCodigo("?g="+$("codigo").value.trim());if(!c){$("codigoMsg").textContent="Não reconheci esse link ou código.";return}$("codigo").value="";$("codigoMsg").textContent="";mudarGrupo(c)});
 $("novoForm").addEventListener("submit",async e=>{e.preventDefault();const nome=$("novoNome").value.trim().slice(0,30);if(!nome)return;
   try{const r=await api("membros",{method:"POST",prefer:"return=representation",body:{grupo,nome}});const m=r&&r[0];if(!m)throw 0;membros[m.id]=m.nome;me=m.id;store.set(chaveMe(),m.id);$("novoNome").value="";draw();toast("Bem-vindo, "+m.nome)}
   catch(err){toast("Não foi possível juntar-te. Tenta outra vez.")}});

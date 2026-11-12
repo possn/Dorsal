@@ -107,3 +107,21 @@ grant select, insert, update, delete on public.provas, public.membros, public.pr
 grant select on public.grupos to anon;
 grant update (nome, logo) on public.grupos to anon;
 grant select, insert on public.cliques to anon;
+
+-- Criar grupos a partir da app: devolve o código secreto do grupo novo.
+create or replace function public.criar_grupo(p_nome text)
+returns text language plpgsql volatile security definer set search_path = public as $$
+declare v_nome text := btrim(coalesce(p_nome, '')); v_codigo text;
+begin
+  if char_length(v_nome) < 1 or char_length(v_nome) > 40 then raise exception 'nome inválido' using errcode = '22023'; end if;
+  if (select count(*) from public.grupos where criado_em > now() - interval '1 hour') >= 30 then
+    raise exception 'demasiados grupos criados, tenta mais tarde' using errcode = '54000'; end if;
+  loop
+    v_codigo := substr(md5(random()::text || clock_timestamp()::text) || md5(random()::text), 1, 16);
+    exit when not exists (select 1 from public.grupos where codigo = v_codigo);
+  end loop;
+  insert into public.grupos (codigo, nome) values (v_codigo, v_nome);
+  return v_codigo;
+end; $$;
+revoke all on function public.criar_grupo(text) from public;
+grant execute on function public.criar_grupo(text) to anon;

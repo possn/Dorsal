@@ -197,4 +197,6 @@ input,select{padding:9px 10px;border:1px solid var(--line);border-radius:6px;bac
 .proxima .k{font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;opacity:.75;font-weight:600}
 .proxima .t{font-family:var(--display);font-weight:700;font-size:1.45rem;line-height:1.1}
 .proxima .s{font-size:.88rem;opacity:.85}
+.drawer li.lbl{padding:8px 18px 2px;font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.panel h2.sub2{font-size:1.15rem;margin-top:18px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:6px;font-weight:600;z-index:10}
