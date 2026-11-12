@@ -52,6 +52,7 @@ create table if not exists public.presencas (
   percurso text not null default '' check (char_length(percurso) <= 40),
   boleia text not null default '' check (boleia in ('', 'oferece', 'precisa')),
   lugares smallint not null default 0 check (lugares between 0 and 8),
+  tempo text not null default '' check (tempo ~ '^([0-9]{1,3}:[0-5][0-9](:[0-5][0-9])?)?$'),
   atualizado timestamptz not null default now(),
   primary key (membro_id, prova_id)
 );

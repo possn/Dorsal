@@ -219,4 +219,21 @@ input,select{padding:9px 10px;border:1px solid var(--line);border-radius:6px;bac
 .tools2 label{display:flex;flex-direction:column;gap:4px;font-weight:600;font-size:.85rem}
 .cd.urg{color:var(--accent);font-weight:700}
 .bib{cursor:pointer}
+.historico{margin-top:8px}
+.quadro{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:10px}
+.quadro ol{list-style:none;margin:8px 0 0;padding:0}
+.quadro li{display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--line)}
+.quadro li:first-child{border-top:0}
+.quadro .pos{width:24px;height:24px;border-radius:50%;background:var(--chip);display:grid;place-items:center;font-weight:700;font-size:.8rem;flex:none}
+.quadro li:first-child .pos{background:var(--accent);color:var(--accent-ink)}
+.quadro .qn{flex:1;font-weight:600}
+.quadro .qc{color:var(--muted);font-variant-numeric:tabular-nums;font-size:.9rem}
+.quadro li.eu .qn::after{content:" (tu)";color:var(--muted);font-weight:400}
+.histlista{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.hist{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 14px;display:flex;flex-direction:column;gap:6px}
+.hist-top{display:flex;gap:10px;align-items:baseline}
+.hist-top .hd{color:var(--muted);font-size:.82rem;white-space:nowrap;font-variant-numeric:tabular-nums}
+.hist-top .titlebtn{font-weight:600}
+.tempoform{display:flex;align-items:center;gap:8px}
+.tempoform .tempo{width:110px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:6px;font-weight:600;z-index:10}

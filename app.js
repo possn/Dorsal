@@ -13,8 +13,9 @@ const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},se
 
 // ---------- estado ----------
 let grupo=null,grupoNome="",grupoLogo="",me=null;
-let extra={},meteo={};
+let extra={},meteo={},passadas=[];
 let provas=[],membros={},pres={},cliques={},loaded=false;
+let histTodas=false;
 let filtroReg=store.get("dorsal.regiao")||"",filtroDist=store.get("dorsal.distrito")||"";
 let casa=null;try{casa=JSON.parse(store.get("dorsal.casa")||"null")}catch(_){}
 let filtroRaio=+(store.get("dorsal.raio")||0);let filtroTipos=new Set((store.get("dorsal.tipos")||"").split("|").filter(Boolean));
@@ -30,7 +31,7 @@ function gruposConhecidos(){try{return JSON.parse(store.get("dorsal.grupos")||"[
 function lembrarGrupo(c,n){const l=gruposConhecidos().filter(x=>x.c!==c);l.unshift({c,n:n||""});store.set("dorsal.grupos",JSON.stringify(l.slice(0,20)))}
 function esquecerGrupo(c){store.set("dorsal.grupos",JSON.stringify(gruposConhecidos().filter(x=>x.c!==c)))}
 function mudarGrupo(c){grupo=c;store.set("dorsal.grupo",c);me=c?store.get("dorsal.membro."+c):null;membros={};pres={};extra={};cliques={};grupoNome="";grupoLogo="";
-  const k=store.get("dorsal.cache."+c);if(k){try{const o=JSON.parse(k);membros=o.membros||{};pres=o.pres||{};extra=o.extra||{};grupoNome=o.grupoNome||"";grupoLogo=o.grupoLogo||""}catch(_){}}
+  const k=store.get("dorsal.cache."+c);if(k){try{const o=JSON.parse(k);membros=o.membros||{};pres=o.pres||{};extra=o.extra||{};passadas=o.passadas||[];grupoNome=o.grupoNome||"";grupoLogo=o.grupoLogo||""}catch(_){}}
   entrarAberto=false;status("");draw();window.scrollTo({top:0});carregar()}
 function chaveMe(){return "dorsal.membro."+grupo}
 function provaAberta(){const m=location.hash.match(/[#&]p=([^&]+)/);return m?decodeURIComponent(m[1]):null}
@@ -55,20 +56,22 @@ async function carregar(){
   try{
     const hoje=hojeISO();
     const reqs=[api("provas?select=*&data=gte."+hoje+"&order=data.asc,nome.asc")];
-    if(grupo)reqs.push(api("grupos?select=nome,logo&codigo=eq."+grupo),api("membros?select=id,nome&order=nome.asc"),api("presencas?select=membro_id,prova_id,estado,percurso,boleia,lugares"),api("cliques?select=prova_id"));
+    if(grupo)reqs.push(api("grupos?select=nome,logo&codigo=eq."+grupo),api("membros?select=id,nome&order=nome.asc"),api("presencas?select=membro_id,prova_id,estado,percurso,boleia,lugares,tempo"),api("cliques?select=prova_id"));
     const [ps,gs,ms,pr,cl]=await Promise.all(reqs);
     provas=ps||[];
     if(grupo){
       if(!gs||!gs.length){status("Esse código de grupo não existe. Confirma o link que recebeste.");esquecerGrupo(grupo);store.set("dorsal.grupo",null);grupo=null;membros={};pres={};}
       else{grupoNome=gs[0].nome||"";grupoLogo=gs[0].logo||"";lembrarGrupo(grupo,grupoNome);membros={};for(const m of ms||[])membros[m.id]=m.nome;
-        pres={};extra={};for(const x of pr||[]){(pres[x.prova_id]=pres[x.prova_id]||{})[x.membro_id]=x.estado;(extra[x.prova_id]=extra[x.prova_id]||{})[x.membro_id]={percurso:x.percurso||"",boleia:x.boleia||"",lugares:x.lugares||0}}
+        pres={};extra={};for(const x of pr||[]){(pres[x.prova_id]=pres[x.prova_id]||{})[x.membro_id]=x.estado;(extra[x.prova_id]=extra[x.prova_id]||{})[x.membro_id]={percurso:x.percurso||"",boleia:x.boleia||"",lugares:x.lugares||0,tempo:x.tempo||""}}
+        {const ids=new Set(provas.map(p=>p.id)),falta=Object.keys(pres).filter(id=>!ids.has(id));passadas=[];
+          if(falta.length){try{passadas=(await api("provas?select=*&order=data.desc&id=in.("+falta.map(i=>'"'+encodeURIComponent(i)+'"').join(",")+")"))||[]}catch(_){}}}
         cliques={};for(const c of cl||[])cliques[c.prova_id]=(cliques[c.prova_id]||0)+1;
         me=store.get(chaveMe());if(me&&!membros[me]){me=null;store.set(chaveMe(),null)}
         if($("statusText").textContent.startsWith("Sem ligação"))status("");}
     }
-    store.set("dorsal.cache."+(grupo||"-"),JSON.stringify({provas,membros,pres,extra,grupoNome,grupoLogo}));
+    store.set("dorsal.cache."+(grupo||"-"),JSON.stringify({provas,membros,pres,extra,passadas,grupoNome,grupoLogo}));
   }catch(e){
-    const c=store.get("dorsal.cache."+(grupo||"-"))||store.get("dorsal.cache");if(c){try{const o=JSON.parse(c);provas=o.provas||[];membros=o.membros||{};pres=o.pres||{};extra=o.extra||{};grupoNome=o.grupoNome||"";grupoLogo=o.grupoLogo||""}catch(_){}}
+    const c=store.get("dorsal.cache."+(grupo||"-"))||store.get("dorsal.cache");if(c){try{const o=JSON.parse(c);provas=o.provas||[];membros=o.membros||{};pres=o.pres||{};extra=o.extra||{};passadas=o.passadas||[];grupoNome=o.grupoNome||"";grupoLogo=o.grupoLogo||""}catch(_){}}
     else{try{provas=await (await fetch("provas.json")).json()}catch(_){}}
     status("Sem ligação ao servidor. Estás a ver a última versão guardada.");
   }
@@ -92,7 +95,7 @@ function definirCasa(c){casa=c;store.set("dorsal.casa",c?JSON.stringify(c):null)
 // ---------- utilitários ----------
 function parseD(s){const[y,m,d]=String(s).split("-").map(Number);return new Date(y,m-1,d)}
 function hoje(){const t=new Date();return new Date(t.getFullYear(),t.getMonth(),t.getDate())}
-function faltam(s){const n=Math.round((parseD(s)-hoje())/864e5);return n===0?"é hoje":n===1?"é amanhã":"faltam "+n+" dias"}
+function faltam(s){const n=Math.round((parseD(s)-hoje())/864e5);return n===0?"é hoje":n===1?"é amanhã":n===-1?"foi ontem":n<0?"foi há "+(-n)+" dias":"faltam "+n+" dias"}
 function dataLonga(s){const d=parseD(s);return DIAS[d.getDay()]+", "+d.getDate()+" de "+MESES[d.getMonth()]}
 function valid(u){return typeof u==="string"&&/^https?:\/\//i.test(u)?u:null}
 function nomeDe(id){return membros[id]||"Alguém"}
@@ -119,9 +122,22 @@ function resumo(){const lim=new Date(hoje().getTime()+42*864e5);const ps=futuras
     return "- "+d.getDate()+" de "+MESES[d.getMonth()]+", "+p.nome+(p.concelho?" ("+p.concelho+")":"")+": "+parts.join("; ")+(valid(p.inscricao)?"\n  "+p.inscricao:"")}).join("\n")}
 
 // ---------- acções ----------
-const exDe=(pid,id)=>(extra[pid]&&extra[pid][id])||{percurso:"",boleia:"",lugares:0};
+const exDe=(pid,id)=>(extra[pid]&&extra[pid][id])||{percurso:"",boleia:"",lugares:0,tempo:""};
+function normTempo(v){v=String(v||"").trim().replace(/[hH]/,":").replace(/[mM']/,":").replace(/[sS"]/,"").replace(/\s+/g,"");if(!v)return"";const m=v.match(/^(\d{1,3}):(\d{1,2})(?::(\d{1,2}))?$/);if(!m||+m[2]>59||(m[3]&&+m[3]>59))return null;return +m[1]+":"+m[2].padStart(2,"0")+(m[3]!=null?":"+m[3].padStart(2,"0"):"")}
+function historico(){if(!grupo||!passadas.length)return null;const ano=new Date().getFullYear();const foi=(pid,id)=>{const e=pres[pid]&&pres[pid][id];return e==="inscrito"||e==="vou"};
+  const cont={};for(const p of passadas)if(p.data.startsWith(String(ano)))for(const id of Object.keys(pres[p.id]||{}))if(foi(p.id,id))cont[id]=(cont[id]||0)+1;
+  const quadro=Object.entries(cont).sort((a,b)=>b[1]-a[1]||nomeDe(a[0]).localeCompare(nomeDe(b[0]),"pt"));
+  const linha=p=>{const ids=Object.keys(pres[p.id]||{}).filter(id=>foi(p.id,id)).sort((a,b)=>nomeDe(a).localeCompare(nomeDe(b),"pt"));const d=parseD(p.data);
+    let meu=null;if(ids.includes(me)&&podeMarcar()){const inp=h("input",{class:"tempo",inputmode:"numeric",placeholder:"h:mm:ss",value:exDe(p.id,me).tempo,"aria-label":"O teu tempo em "+p.nome});
+      meu=h("form",{class:"tempoform",onsubmit:e=>{e.preventDefault();const t=normTempo(inp.value);if(t===null){toast("Escreve o tempo como 4:35:12");return}setExtra(p.id,{tempo:t}).then(ok=>{if(ok)toast(t?"Tempo guardado":"Tempo apagado")})}},h("span",{class:"hint",text:"O teu tempo"}),inp,h("button",{class:"btn small",type:"submit",text:"Guardar"}))}
+    return h("li",{class:"hist"},h("div",{class:"hist-top"},h("span",{class:"hd",text:d.getDate()+" "+MESES[d.getMonth()].slice(0,3)+" "+d.getFullYear()}),h("button",{class:"titlebtn",onclick:()=>abrir(p.id),text:p.nome})),
+      h("div",{class:"people"},...ids.map(id=>{const x=exDe(p.id,id);return h("span",{class:"p inscrito",text:nomeDe(id)+(x.percurso?" · "+x.percurso:"")+(x.tempo?" · "+x.tempo:"")})})),meu)};
+  return h("section",{class:"historico"},h("h2",{class:"month",text:"Provas feitas"}),
+    quadro.length?h("div",{class:"quadro"},h("strong",{text:"Quadro de "+ano}),h("ol",null,...quadro.map(([id,n],i)=>h("li",{class:id===me?"eu":null},h("span",{class:"pos",text:String(i+1)}),h("span",{class:"qn",text:nomeDe(id)}),h("span",{class:"qc",text:n+(n===1?" prova":" provas")}))))):null,
+    h("ul",{class:"histlista"},...passadas.slice(0,histTodas?999:5).map(linha)),
+    passadas.length>5?h("button",{class:"linkbtn",onclick:()=>{histTodas=!histTodas;draw()},text:histTodas?"Mostrar menos":"Ver todas ("+passadas.length+")"}):null)}
 async function setExtra(pid,campos){if(!podeMarcar()||!(pres[pid]&&pres[pid][me]))return;const m=extra[pid]=extra[pid]||{};const antes=Object.assign({},exDe(pid,me));m[me]=Object.assign({},antes,campos);draw();
-  try{await api("presencas?membro_id=eq."+me+"&prova_id=eq."+encodeURIComponent(pid),{method:"PATCH",prefer:"return=minimal",body:campos})}catch(err){m[me]=antes;draw();toast("Não foi possível guardar. Tenta outra vez.")}}
+  try{await api("presencas?membro_id=eq."+me+"&prova_id=eq."+encodeURIComponent(pid),{method:"PATCH",prefer:"return=minimal",body:campos});return true}catch(err){m[me]=antes;draw();toast("Não foi possível guardar. Tenta outra vez.");return false}}
 function icsDe(p){const d=p.data.replace(/-/g,""),d2=(()=>{const x=parseD(p.data);x.setDate(x.getDate()+1);return x.getFullYear()+String(x.getMonth()+1).padStart(2,"0")+String(x.getDate()).padStart(2,"0")})();
   const esc=s=>String(s||"").replace(/[\\;,]/g,m=>"\\"+m).replace(/\n/g,"\\n");const url=valid(p.inscricao)||valid(p.info)||"";
   return ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Dorsal//PT","BEGIN:VEVENT","UID:"+p.id+"@dorsal","DTSTAMP:"+new Date().toISOString().replace(/[-:]/g,"").slice(0,15)+"Z","DTSTART;VALUE=DATE:"+d,"DTEND;VALUE=DATE:"+d2,"SUMMARY:"+esc(p.nome),
@@ -172,7 +188,7 @@ function card(p){const d=parseD(p.data),q=quem(p.id);
       n?h("div",{class:"owner",text:n+(n===1?" clique":" cliques")+" do grupo no link de inscrição"}):null))}
 function detalhe(pid){const box=$("view-prova");box.replaceChildren();
   const voltar=h("button",{class:"back",onclick:fechar,text:"← Provas"});
-  const p=provas.find(x=>x.id===pid);
+  const p=provas.find(x=>x.id===pid)||passadas.find(x=>x.id===pid);
   if(!p){box.append(voltar,h("div",{class:"empty",text:loaded?"Esta prova já não está no calendário.":"A carregar…"}));return}
   const d=parseD(p.data),q=quem(p.id),insc=valid(p.inscricao),info=valid(p.info);
   const pessoa=(id,k)=>{const x=exDe(p.id,id);return h("li",{class:"pessoa "+k},h("span",{class:"nome",text:nomeDe(id)+(id===me?" (tu)":"")}),
@@ -243,6 +259,7 @@ function draw(){
     h("span",{class:"k",text:"A tua próxima prova"}),h("span",{class:"t",text:p.nome}),h("span",{class:"s",text:dataLonga(p.data)+" · "+faltam(p.data)+" · "+(e==="inscrito"?"inscrito":"ainda sem inscrição")+(x.percurso?" · "+x.percurso:"")}))})():null;
   listaPorMes(grp,$("view-grupo"),podeMarcar()?"Ainda ninguém marcou presença. Vai a Todas e carrega em Vou, Inscrito ou Talvez.":"Quando entrares no grupo, aqui aparecem as provas a que o grupo vai.");
   if(banner)$("view-grupo").prepend(banner);
+  {const hs=historico();if(hs)$("view-grupo").append(hs)}
   const reg=REGIOES.find(r=>r[0]===filtroReg),naReg=p=>!reg||reg[2].includes(p.distrito);
   $("regioes").replaceChildren(...[["","Todo o país",null],...REGIOES].map(([id,nome])=>{const n=id?fut.filter(p=>REGIOES.find(r=>r[0]===id)[2].includes(p.distrito)).length:fut.length;
     return h("button",{type:"button",class:"chip-reg","aria-pressed":String(filtroReg===id),onclick:()=>{filtroReg=id;filtroDist="";store.set("dorsal.regiao",id||null);store.set("dorsal.distrito",null);$("fDistrito").value="";draw()}},nome+" ",h("span",{class:"n",text:String(n)}))}));
