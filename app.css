@@ -409,3 +409,10 @@ label.btn.off{opacity:.45;pointer-events:none}
 @media (min-width:700px){.card{grid-template-columns:84px 1fr;padding:16px}}
 .dist{align-items:center}
 .dist span{line-height:1.5}
+/* página da prova */
+.acoes.icons{display:grid;grid-template-columns:repeat(auto-fit,minmax(70px,1fr));gap:8px;margin:12px 0}
+.acao{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--fg);font:inherit;font-size:.8rem;font-weight:600;text-decoration:none;cursor:pointer}
+.acao .ic{color:var(--accent)}
+.acao .ic svg{width:24px;height:24px}
+.acao:active{transform:scale(.97)}
+#view-prova .eu{display:flex;align-items:center;gap:10px;margin:14px 0 2px;flex-wrap:wrap}
