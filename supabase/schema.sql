@@ -253,3 +253,8 @@ grant execute on function public.apagar_membro(uuid) to anon, authenticated;
 -- admin_editar, admin_remover, admin_novo_token e admin_novo_codigo (todas SECURITY DEFINER).
 -- A coluna admin_hash não é legível pelo anon (grant de select só em codigo, nome, logo, criado_em),
 -- e a política grupos_alterar só deixa editar directamente grupos sem administrador.
+
+-- ---------- treinos de grupo ----------
+-- Um treino é uma linha em provas com fonte = 'treino', grupo preenchido, hora (HH:MM) e nota = ponto de encontro.
+alter table public.provas add column if not exists hora text;
+-- alter table public.provas add constraint provas_hora_fmt check (hora is null or hora ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$');

@@ -3,6 +3,7 @@
 // POST { comentario_id } ou { tipo: "comentario", comentario_id }  (cabeçalho x-grupo) -> mensagem nova na conversa de uma prova
 // POST { tipo: "presenca", prova_id, membro_id }                    (cabeçalho x-grupo) -> alguém marcou Inscrito ou Vou
 // POST { tipo: "lembretes" }                                         -> lembrete na véspera (chamado pelo pg_cron)
+// POST { tipo: "treino", prova_id, membro_id }                     (cabeçalho x-grupo) -> treino novo marcado
 // POST { tipo: "semana", teste? }                                    -> resumo da semana, domingo à noite (pg_cron); teste=true só pré-visualiza
 import webpush from "npm:web-push@3.6.7";
 
@@ -81,7 +82,7 @@ async function comentario(grupo: string, comentario_id: number) {
 }
 
 async function presenca(grupo: string, prova_id: string, membro_id: string) {
-  if (!UUID.test(membro_id) || !prova_id || prova_id.length > 80) return { erro: "pedido inválido" };
+  if (!UUID.test(membro_id) || !prova_id || prova_id.length > 120) return { erro: "pedido inválido" };
   const desde = new Date(Date.now() - 10 * 60 * 1000).toISOString();
   const p = await db(`presencas?grupo=eq.${grupo}&membro_id=eq.${membro_id}&prova_id=eq.${encodeURIComponent(prova_id)}&atualizado=gte.${desde}&select=estado`);
   const estado = p?.[0]?.estado;
@@ -106,7 +107,7 @@ async function lembretes() {
   const lx = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Lisbon" }));
   lx.setDate(lx.getDate() + 1);
   const amanha = `${lx.getFullYear()}-${String(lx.getMonth() + 1).padStart(2, "0")}-${String(lx.getDate()).padStart(2, "0")}`;
-  const provas = await db(`provas?data=eq.${amanha}&select=id,nome,concelho`);
+  const provas = await db(`provas?data=eq.${amanha}&select=id,nome,concelho,hora,fonte`);
   if (!provas || !provas.length) return { enviadas: 0, motivo: "sem provas amanhã" };
   const ids = provas.map((p: { id: string }) => `"${encodeURIComponent(p.id)}"`).join(",");
   const pres = await db(`presencas?prova_id=in.(${ids})&estado=in.(inscrito,vou)&select=grupo,membro_id,prova_id,estado,percurso`);
@@ -119,8 +120,8 @@ async function lembretes() {
     const outros = await db(`presencas?grupo=eq.${x.grupo}&prova_id=eq.${encodeURIComponent(x.prova_id)}&estado=in.(inscrito,vou)&membro_id=neq.${x.membro_id}&select=membro_id`);
     const n = (outros || []).length;
     const payload = JSON.stringify({
-      title: `Amanhã: ${p?.nome || "prova"}`,
-      body: (x.estado === "vou" ? "Ainda não marcaste a inscrição. " : "") + (x.percurso ? `${x.percurso}. ` : "") + (n ? `Vão mais ${n} do grupo. ` : "") + "Confirma o material e o abastecimento. Boa prova!",
+      title: `Amanhã: ${p?.nome || "prova"}${p?.hora ? " às " + p.hora : ""}`,
+      body: (x.estado === "vou" && p?.fonte !== "treino" ? "Ainda não marcaste a inscrição. " : "") + (x.percurso ? `${x.percurso}. ` : "") + (n ? `Vão mais ${n} do grupo. ` : "") + (p?.fonte === "treino" ? "Bom treino!" : "Confirma o material e o abastecimento. Boa prova!"),
       url: `./?g=${x.grupo}#p=${encodeURIComponent(x.prova_id)}`, tag: `lemb-${x.prova_id}`,
     });
     enviadas += await enviar(subs, payload);
@@ -136,7 +137,7 @@ async function semana(teste: boolean) {
   const lx = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Lisbon" }));
   const ini = new Date(lx); ini.setDate(ini.getDate() + 1);
   const fim = new Date(lx); fim.setDate(fim.getDate() + 7);
-  const provas = await db(`provas?data=gte.${iso(ini)}&data=lte.${iso(fim)}&select=id,nome,data&order=data`);
+  const provas = await db(`provas?data=gte.${iso(ini)}&data=lte.${iso(fim)}&select=id,nome,data,hora&order=data`);
   if (!provas || !provas.length) return { enviadas: 0, motivo: "sem provas na semana" };
   const ids = provas.map((p: { id: string }) => `"${encodeURIComponent(p.id)}"`).join(",");
   const pres = await db(`presencas?prova_id=in.(${ids})&estado=in.(inscrito,vou,talvez)&select=grupo,membro_id,prova_id,estado`) || [];
@@ -153,7 +154,7 @@ async function semana(teste: boolean) {
       const vao = aqui.filter((x) => x.estado !== "talvez").map((x) => (nome[x.membro_id] || "?") + (x.estado === "inscrito" ? " ✓" : ""));
       const talvez = aqui.filter((x) => x.estado === "talvez").length;
       const d = new Date(p.data + "T12:00:00");
-      linhas.push(`${DSEM[d.getDay()]} ${d.getDate()} · ${p.nome}: ${vao.join(", ") || "ninguém confirmado"}${talvez ? ` (+${talvez} talvez)` : ""}`);
+      linhas.push(`${DSEM[d.getDay()]} ${d.getDate()}${p.hora ? " " + p.hora : ""} · ${p.nome}: ${vao.join(", ") || "ninguém confirmado"}${talvez ? ` (+${talvez} talvez)` : ""}`);
     }
     if (!linhas.length) continue;
     const payload = { title: `Esta semana${g ? " · " + g : ""}`, body: linhas.join("\n").slice(0, 400), url: `./?g=${grupo}`, tag: `semana-${grupo}` };
@@ -163,6 +164,23 @@ async function semana(teste: boolean) {
     enviadas += await enviar(subs || [], JSON.stringify(payload));
   }
   return teste ? { previas } : { enviadas, grupos: Object.keys(porGrupo).length };
+}
+
+async function treino(grupo: string, prova_id: string, membro_id: string) {
+  if (!UUID.test(membro_id) || !prova_id || prova_id.length > 120) return { erro: "pedido inválido" };
+  const desde = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const t = (await db(`provas?id=eq.${encodeURIComponent(prova_id)}&grupo=eq.${grupo}&fonte=eq.treino&criado_por=eq.${membro_id}&criado_em=gte.${desde}&select=nome,data,hora,nota`))?.[0];
+  if (!t) return { enviadas: 0, motivo: "sem treino recente" };
+  if (!(await primeiraVez(`treino:${grupo}:${prova_id}`))) return { enviadas: 0, motivo: "já avisado" };
+  const [g, au, subs] = await Promise.all([nomeGrupo(grupo), nomeMembro(membro_id),
+    db(`subscricoes?grupo=eq.${grupo}&membro_id=neq.${membro_id}&select=endpoint,p256dh,auth`)]);
+  const d = new Date(t.data + "T12:00:00");
+  const payload = JSON.stringify({
+    title: `Treino: ${t.nome}` + (g ? " · " + g : ""),
+    body: `${au} marcou para ${DSEM[d.getDay()]} ${d.getDate()}${t.hora ? " às " + t.hora : ""}${t.nota ? " · " + t.nota : ""}. Vais?`,
+    url: `./?g=${grupo}#p=${encodeURIComponent(prova_id)}`, tag: `treino-${grupo}-${prova_id}`,
+  });
+  return { enviadas: await enviar(subs || [], payload), total: (subs || []).length };
 }
 
 Deno.serve(async (req) => {
@@ -179,6 +197,7 @@ Deno.serve(async (req) => {
     const grupo = (req.headers.get("x-grupo") || "").toLowerCase();
     if (!/^[a-z0-9]{6,40}$/.test(grupo)) return json({ erro: "pedido inválido" }, 400);
     if (tipo === "comentario" && Number.isInteger(body.comentario_id)) return json(await comentario(grupo, body.comentario_id));
+    if (tipo === "treino") return json(await treino(grupo, String(body.prova_id || ""), String(body.membro_id || "")));
     if (tipo === "presenca") return json(await presenca(grupo, String(body.prova_id || ""), String(body.membro_id || "")));
     return json({ erro: "pedido inválido" }, 400);
   } catch (e) {

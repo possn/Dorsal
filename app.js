@@ -228,7 +228,7 @@ function descarregarGPX(p,t){const c=DorsalGPX.descodificar(t.pontos),el=t.elev?
 
 // ---------- estatísticas e conquistas ----------
 let estQuem="eu",estAno=null;
-function feitasDe(id,ano){return passadas.filter(p=>(!ano||p.data.startsWith(ano))&&foiA(p.id,id))}
+function feitasDe(id,ano){return passadas.filter(p=>!eTreino(p)&&(!ano||p.data.startsWith(ano))&&foiA(p.id,id))}
 function barrasSVG(vals,rotulos,unid,cor){const W=600,H=190,P={l:60,r:8,t:18,b:28},mx=Math.max(1,...vals),bw=(W-P.l-P.r)/vals.length;const ns="http://www.w3.org/2000/svg";
   const svg=document.createElementNS(ns,"svg");svg.setAttribute("viewBox","0 0 "+W+" "+H);svg.setAttribute("class","barras");svg.setAttribute("role","img");
   svg.setAttribute("aria-label",rotulos.map((r,i)=>r+": "+fmtN(Math.round(vals[i]*10)/10)+" "+unid).join("; "));
@@ -375,7 +375,7 @@ function perfil(id){const box=h("article",{class:"sec est perfil"});
   const prox=futuras().filter(p=>pres[p.id]&&pres[p.id][id]).sort((a,b)=>a.data.localeCompare(b.data));
   box.append(h("h2",{text:"Próximas provas"}),prox.length?h("ul",{class:"plist"},...prox.map(p=>{const x=exDe(p.id,id),e=pres[p.id][id];
     return linhaProva(p,[(ESTADOS.find(k=>k[0]===e)||[,""])[1],x.percurso,x.boleia==="oferece"?"oferece boleia":x.boleia==="precisa"?"precisa de boleia":""])})):h("p",{class:"hint",text:"Nenhuma marcada."}));
-  if(id!==me&&me){const comum=futuras().filter(p=>foiA(p.id,id)&&foiA(p.id,me)).length,feitasJuntos=passadas.filter(p=>foiA(p.id,id)&&foiA(p.id,me)).length;
+  if(id!==me&&me){const comum=futuras().filter(p=>foiA(p.id,id)&&foiA(p.id,me)).length,feitasJuntos=passadas.filter(p=>!eTreino(p)&&foiA(p.id,id)&&foiA(p.id,me)).length;
     if(comum||feitasJuntos)box.append(h("p",{class:"nota",text:"Contigo: "+[feitasJuntos?feitasJuntos+(feitasJuntos===1?" prova feita":" provas feitas"):"",comum?comum+(comum===1?" próxima":" próximas"):""].filter(Boolean).join(" · ")}))}
   const feitas=feitasDe(id,null).sort((a,b)=>b.data.localeCompare(a.data));
   box.append(h("h2",{text:"Provas feitas"}),feitas.length?h("ul",{class:"plist"},...feitas.map(p=>{const x=exDe(p.id,id),sg=segDeTempo(x.tempo);
@@ -442,9 +442,9 @@ function segDeTempo(t){if(!t)return 0;const x=t.split(":").map(Number);return x.
 const fmtH=sg=>Math.floor(sg/3600)+"h"+String(Math.floor(sg%3600/60)).padStart(2,"0");
 const fmtN=n=>Number.isInteger(n)?String(n):n.toFixed(1).replace(".",",");
 const foiA=(pid,id)=>{const e=pres[pid]&&pres[pid][id];return e==="inscrito"||e==="vou"};
-function totais(id,ano){const feitas=passadas.filter(p=>p.data.startsWith(ano)&&foiA(p.id,id));let km=0,d=0,sg=0;
+function totais(id,ano){const feitas=passadas.filter(p=>!eTreino(p)&&p.data.startsWith(ano)&&foiA(p.id,id));let km=0,d=0,sg=0;
   for(const p of feitas){const x=exDe(p.id,id);km+=+x.km||0;d+=+x.dplus||0;sg+=segDeTempo(x.tempo)}return{n:feitas.length,km,d,sg}}
-function meuAno(){if(!me||!grupo)return null;const ano=String(new Date().getFullYear());const t=totais(me,ano);const prox=futuras().filter(p=>foiA(p.id,me));
+function meuAno(){if(!me||!grupo)return null;const ano=String(new Date().getFullYear());const t=totais(me,ano);const prox=futuras().filter(p=>!eTreino(p)&&foiA(p.id,me));
   if(!t.n&&!prox.length)return null;const stat=(n,l)=>h("div",{class:"st"},h("b",{text:n}),h("span",{text:l}));
   return h("div",{class:"meuano"},h("span",{class:"k",text:"O meu "+ano}),h("div",{class:"sts"},
     stat(String(t.n),t.n===1?"prova feita":"provas feitas"),t.km?stat(fmtN(Math.round(t.km*10)/10),"km"):null,t.d?stat(t.d>=1000?fmtN(Math.round(t.d/100)/10)+"k":String(t.d),"m D+"):null,t.sg?stat(fmtH(t.sg),"em prova"):null,stat(String(prox.length),prox.length===1?"próxima":"próximas")),
@@ -527,7 +527,7 @@ function historico(){if(!grupo||!me)return null;const ano=String(new Date().getF
       else meu=h("button",{class:"linkbtn",type:"button",onclick:()=>{editHist=p.id;draw()},text:"✎ Editar"});if(editHist!==p.id)meu=h("div",{class:"row histacts"},meu,h("button",{class:"linkbtn",type:"button",onclick:()=>partilharResultado(p,me),text:"↗ Partilhar resultado"}))}
     return h("li",{class:"hist"},h("div",{class:"hist-top"},h("span",{class:"hd",text:d.getDate()+" "+MESES[d.getMonth()].slice(0,3)+" "+d.getFullYear()}),h("button",{class:"titlebtn",onclick:()=>abrir(p.id),text:p.nome})),
       quem.length?h("div",{class:"people"},...quem.map(id=>{const x=exDe(p.id,id);return h("span",{class:"p inscrito",text:nomeDe(id)+(x.percurso?" · "+x.percurso:"")+(x.km?" · "+fmtN(+x.km)+" km":"")+(x.tempo?" · "+x.tempo:"")+(temTrilho.has(p.id+"|"+id)?" · 📍":"")})})):null,meu)};
-  const lista=passadas.filter(p=>Object.keys(pres[p.id]||{}).some(id=>foiA(p.id,id)));
+  const lista=passadas.filter(p=>!eTreino(p)&&Object.keys(pres[p.id]||{}).some(id=>foiA(p.id,id)));
   return h("section",{class:"historico"},h("div",{class:"row between"},h("h2",{class:"month",text:"Provas feitas"}),regAberto?null:h("button",{class:"btn small",type:"button",onclick:()=>{regAberto=true;draw();setTimeout(()=>$("rNome")&&$("rNome").focus(),50)},text:"+ Registar prova feita"})),
     regAberto?registoForm():null,
     quadro.length?h("div",{class:"quadro"},h("div",{class:"row between"},h("strong",{text:"Quadro de "+ano}),h("div",{class:"seg"},...[["provas","Provas"],["km","Km"]].map(([k,l])=>h("button",{type:"button","aria-pressed":String(quadroPor===k),onclick:()=>{quadroPor=k;draw()},text:l})))),
@@ -536,7 +536,12 @@ function historico(){if(!grupo||!me)return null;const ano=String(new Date().getF
     lista.length>5?h("button",{class:"linkbtn",onclick:()=>{histTodas=!histTodas;draw()},text:histTodas?"Mostrar menos":"Ver todas ("+lista.length+")"}):null)}
 async function setExtra(pid,campos){if(!podeMarcar()||!(pres[pid]&&pres[pid][me]))return;const m=extra[pid]=extra[pid]||{};const antes=Object.assign({},exDe(pid,me));m[me]=Object.assign({},antes,campos);draw();
   try{await api("presencas?membro_id=eq."+me+"&prova_id=eq."+encodeURIComponent(pid),{method:"PATCH",prefer:"return=minimal",body:campos});return true}catch(err){m[me]=antes;draw();toast("Não foi possível guardar. Tenta outra vez.");return false}}
-function icsDe(p){const d=p.data.replace(/-/g,""),d2=(()=>{const x=parseD(p.data);x.setDate(x.getDate()+1);return x.getFullYear()+String(x.getMonth()+1).padStart(2,"0")+String(x.getDate()).padStart(2,"0")})();
+const eTreino=p=>p&&p.fonte==="treino";
+function icsDe(p){if(eTreino(p)&&p.hora){const [H,M]=p.hora.split(":").map(Number),ini=parseD(p.data);ini.setHours(H,M,0,0);const fim=new Date(ini.getTime()+2*3600e3);
+    const f=x=>x.getFullYear()+String(x.getMonth()+1).padStart(2,"0")+String(x.getDate()).padStart(2,"0")+"T"+String(x.getHours()).padStart(2,"0")+String(x.getMinutes()).padStart(2,"0")+"00";
+    const esc=s=>String(s||"").replace(/[\\;,]/g,m=>"\\"+m).replace(/\n/g,"\\n");
+    return ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Dorsal//PT","BEGIN:VEVENT","UID:"+p.id+"@dorsal","DTSTAMP:"+new Date().toISOString().replace(/[-:]/g,"").slice(0,15)+"Z","DTSTART;TZID=Europe/Lisbon:"+f(ini),"DTEND;TZID=Europe/Lisbon:"+f(fim),"SUMMARY:"+esc(p.nome),
+      "LOCATION:"+esc([p.nota,p.concelho,p.distrito].filter(Boolean).join(", ")),"DESCRIPTION:"+esc(mensagem(p)),"BEGIN:VALARM","TRIGGER:-PT2H","ACTION:DISPLAY","DESCRIPTION:"+esc(p.nome),"END:VALARM","END:VEVENT","END:VCALENDAR"].join("\r\n")}const d=p.data.replace(/-/g,""),d2=(()=>{const x=parseD(p.data);x.setDate(x.getDate()+1);return x.getFullYear()+String(x.getMonth()+1).padStart(2,"0")+String(x.getDate()).padStart(2,"0")})();
   const esc=s=>String(s||"").replace(/[\\;,]/g,m=>"\\"+m).replace(/\n/g,"\\n");const url=valid(p.inscricao)||valid(p.info)||"";
   return ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Dorsal//PT","BEGIN:VEVENT","UID:"+p.id+"@dorsal","DTSTAMP:"+new Date().toISOString().replace(/[-:]/g,"").slice(0,15)+"Z","DTSTART;VALUE=DATE:"+d,"DTEND;VALUE=DATE:"+d2,"SUMMARY:"+esc(p.nome),
     "LOCATION:"+esc([p.concelho,p.distrito].filter(Boolean).join(", ")),"DESCRIPTION:"+esc(mensagem(p)),url?"URL:"+url:null,"BEGIN:VALARM","TRIGGER:-P2D","ACTION:DISPLAY","DESCRIPTION:"+esc(p.nome),"END:VALARM","END:VEVENT","END:VCALENDAR"].filter(Boolean).join("\r\n")}
@@ -564,7 +569,7 @@ async function remover(pid){if(confirmDel!==pid){confirmDel=pid;draw();return}co
   try{await api("provas?id=eq."+encodeURIComponent(pid),{method:"DELETE"});provas=provas.filter(p=>p.id!==pid);draw();toast("Prova removida")}catch(e){toast("Não foi possível remover.")}}
 
 // ---------- desenho ----------
-function segDe(p){const mine=pres[p.id]&&pres[p.id][me];return podeMarcar()?h("div",{class:"seg",role:"group","aria-label":"A tua presença"},...ESTADOS.map(([k,l])=>h("button",{class:k,"aria-pressed":String(mine===k),onclick:()=>setEstado(p.id,k),text:l}))):null}
+function segDe(p){const mine=pres[p.id]&&pres[p.id][me];return podeMarcar()?h("div",{class:"seg",role:"group","aria-label":"A tua presença"},...ESTADOS.filter(([k])=>!(eTreino(p)&&k==="inscrito")).map(([k,l])=>h("button",{class:k,"aria-pressed":String(mine===k),onclick:()=>setEstado(p.id,k),text:l}))):null}
 function msgDe(p){if(openMsg!==p.id)return null;const txt=mensagem(p),ta=h("textarea",{readonly:true,"aria-label":"Mensagem para o WhatsApp"});ta.value=txt;
   return h("div",{class:"msg"},ta,h("div",{class:"row"},h("button",{class:"btn primary small",onclick:()=>copiar(txt,ta),text:"Copiar"}),h("a",{class:"btn small",href:"https://wa.me/?text="+encodeURIComponent(txt),target:"_blank",rel:"noopener",text:"Abrir no WhatsApp"})))}
 function contagem(q){const parts=[];if(q.inscrito.length)parts.push(q.inscrito.length+(q.inscrito.length===1?" inscrito":" inscritos"));if(q.vou.length)parts.push(q.vou.length+(q.vou.length===1?" vai":" vão"));if(q.talvez.length)parts.push(q.talvez.length+" talvez");return parts.join(" · ")}
@@ -572,17 +577,19 @@ function card(p){const d=parseD(p.data),q=quem(p.id);
   const people=h("div",{class:"people"},...ESTADOS.flatMap(([k,l])=>q[k].map(id=>h("span",{class:"p "+k,title:l,text:nomeDe(id)+(k==="inscrito"?" ✓":"")}))));
   const seg=segDe(p);
   const insc=valid(p.inscricao),info=valid(p.info);
+  const tr=eTreino(p);
   const links=h("div",{class:"links"},
-    insc?h("a",{href:insc,target:"_blank",rel:"noopener",onclick:()=>cliqueInsc(p.id),text:"Inscrição ↗"}):h("span",{class:"hint",text:"Sem link de inscrição"}),
+    insc?h("a",{href:insc,target:"_blank",rel:"noopener",onclick:()=>cliqueInsc(p.id),text:"Inscrição ↗"}):tr?null:h("span",{class:"hint",text:"Sem link de inscrição"}),
     info?h("a",{href:info,target:"_blank",rel:"noopener",text:"Informação ↗"}):null,
     h("button",{class:"linkbtn",onclick:()=>abrir(p.id),text:ONLINE&&grupo?"Quem vai"+(temGente(p.id)?" ("+contagem(q)+")":""):"Abrir prova"}),
     nCom[p.id]?h("button",{class:"linkbtn com"+(novas[p.id]?" nova":""),onclick:()=>abrir(p.id),text:"💬 "+nCom[p.id]+(novas[p.id]?" · "+novas[p.id]+(novas[p.id]===1?" nova":" novas"):"")}):null,
     (podeMarcar()&&p.grupo&&p.grupo===grupo)?h("button",{class:"linkbtn",onclick:()=>remover(p.id),text:confirmDel===p.id?"Confirmar remoção":"Remover"}):null);
   const n=cliques[p.id]||0,dias=Math.round((d-hoje())/864e5);
-  return h("article",{class:"card"},
+  return h("article",{class:"card"+(tr?" treino":"")},
     h("div",{class:"bib",role:"button",tabindex:"0","aria-label":dataLonga(p.data)+". Abrir "+p.nome,onclick:()=>abrir(p.id)},h("div",{class:"d",text:d.getDate()}),h("div",{class:"m",text:MESES[d.getMonth()].slice(0,3)}),h("div",{class:"w",text:DIAS[d.getDay()]})),
-    h("div",{class:"info"},h("h3",null,h("button",{class:"titlebtn",onclick:()=>abrir(p.id),text:p.nome})),
-      h("div",{class:"meta"},h("strong",{text:[p.concelho,p.distrito].filter(Boolean).join(", ")||"Local por confirmar"}),"  ·  ",h("span",{class:dias<=7?"cd urg":"cd",text:faltam(p.data)}),(kmAte(p)!=null?"  ·  ≈ "+Math.round(kmAte(p))+" km de casa":"")+(p.nota?"  ·  "+p.nota:"")),
+    h("div",{class:"info"},tr?h("span",{class:"tagtreino",text:"Treino do grupo"+(p.hora?" · "+p.hora:"")}):null,h("h3",null,h("button",{class:"titlebtn",onclick:()=>abrir(p.id),text:p.nome})),
+      tr&&p.nota?h("div",{class:"ponto",text:"📍 "+p.nota}):null,
+      h("div",{class:"meta"},h("strong",{text:[p.concelho,p.distrito].filter(Boolean).join(", ")||"Local por confirmar"}),"  ·  ",h("span",{class:dias<=7?"cd urg":"cd",text:faltam(p.data)}),(kmAte(p)!=null?"  ·  ≈ "+Math.round(kmAte(p))+" km de casa":"")+(p.nota&&!tr?"  ·  "+p.nota:"")),
       p.distancias?h("div",{class:"dist"},...String(p.distancias).split(",").map(s=>s.trim()).filter(Boolean).map(s=>h("span",{text:s}))):null,
       people.childNodes.length?people:null,seg,links,
       n?h("div",{class:"owner",text:n+(n===1?" clique":" cliques")+" do grupo no link de inscrição"}):null))}
@@ -601,16 +608,17 @@ function detalhe(pid){const box=$("view-prova");box.replaceChildren();
   else{const marcados=new Set([...q.inscrito,...q.vou,...q.talvez]);const falta=Object.keys(membros).filter(id=>!marcados.has(id)).sort((a,b)=>nomeDe(a).localeCompare(nomeDe(b),"pt"));
     gente=h("div",{class:"gente"},
       bloco("inscrito","Inscritos",q.inscrito,"Ninguém do grupo está inscrito ainda."),
-      bloco("vou","Vão, ainda sem inscrição",q.vou,"Ninguém."),
+      bloco("vou",eTreino(p)?"Vão":"Vão, ainda sem inscrição",q.vou,"Ninguém."),
       q.talvez.length?bloco("talvez","Talvez",q.talvez,""):null,
       falta.length?h("details",{class:"falta"},h("summary",{text:"Ainda não marcaram ("+falta.length+")"}),h("p",{class:"hint",text:falta.map(nomeDe).join(", ")})):null)}
   box.append(voltar,h("article",{class:"detalhe"},
     h("div",{class:"card"},
       h("div",{class:"bib","aria-label":dataLonga(p.data)},h("div",{class:"d",text:d.getDate()}),h("div",{class:"m",text:MESES[d.getMonth()].slice(0,3)}),h("div",{class:"w",text:DIAS[d.getDay()]})),
-      h("div",{class:"info"},h("h2",{class:"titulo",text:p.nome}),
-        h("div",{class:"meta"},h("strong",{text:[p.concelho,p.distrito].filter(Boolean).join(", ")||"Local por confirmar"}),"  ·  "+dataLonga(p.data)+", "+faltam(p.data)+(p.nota?"  ·  "+p.nota:"")),
+      h("div",{class:"info"},eTreino(p)?h("span",{class:"tagtreino",text:"Treino do grupo"+(p.hora?" · "+p.hora:"")}):null,h("h2",{class:"titulo",text:p.nome}),
+        eTreino(p)&&p.nota?h("div",{class:"ponto",text:"📍 Encontro: "+p.nota}):null,
+        h("div",{class:"meta"},h("strong",{text:[p.concelho,p.distrito].filter(Boolean).join(", ")||"Local por confirmar"}),"  ·  "+dataLonga(p.data)+(p.hora?" às "+p.hora:"")+", "+faltam(p.data)+(p.nota&&!eTreino(p)?"  ·  "+p.nota:"")),
         p.distancias?h("div",{class:"dist"},...String(p.distancias).split(",").map(s=>s.trim()).filter(Boolean).map(s=>h("span",{text:s}))):null,
-        h("div",{class:"links"},insc?h("a",{href:insc,target:"_blank",rel:"noopener",onclick:()=>cliqueInsc(p.id),text:"Inscrição ↗"}):h("span",{class:"hint",text:"Sem link de inscrição"}),info?h("a",{href:info,target:"_blank",rel:"noopener",text:"Informação ↗"}):null))),
+        h("div",{class:"links"},insc?h("a",{href:insc,target:"_blank",rel:"noopener",onclick:()=>cliqueInsc(p.id),text:"Inscrição ↗"}):eTreino(p)?null:h("span",{class:"hint",text:"Sem link de inscrição"}),info?h("a",{href:info,target:"_blank",rel:"noopener",text:eTreino(p)?"Percurso ↗":"Informação ↗"}):null))),
     previsao(p),
     h("div",{class:"acoes"},
       h("a",{class:"btn small",href:"data:text/calendar;charset=utf-8,"+encodeURIComponent(icsDe(p)),download:p.id+".ics",text:"Adicionar ao calendário"}),
@@ -655,12 +663,12 @@ function draw(){
   $("vistaSeg").hidden=tab!=="todas";for(const b of $("vistaSeg").children)b.setAttribute("aria-pressed",String((b.dataset.v==="cal")===vistaCal));
   $("pgTitle").textContent=tab==="grupo"?"O grupo vai":tab==="todas"?"Provas":"Nova prova";$("resumoBtn").hidden=tab!=="grupo";if(tab!=="grupo")$("resumo").hidden=true;$("pgHead").hidden=!!aberta;
   if(aberta)detalhe(aberta);
-  const fut=futuras();const grp=fut.filter(p=>temGente(p.id));
+  const fut=futuras();const grp=fut.filter(p=>temGente(p.id)||(eTreino(p)&&p.grupo===grupo));
   $("nGrupo").textContent=loaded&&grp.length?grp.length:"";$("nTodas").textContent="";
   if(!loaded){$("view-grupo").replaceChildren(h("div",{class:"empty",text:"A carregar as provas…"}));return}
   const minhas=me?fut.filter(p=>pres[p.id]&&(pres[p.id][me]==="inscrito"||pres[p.id][me]==="vou")):[];
   const banner=minhas.length?(()=>{const p=minhas[0],e=pres[p.id][me],x=exDe(p.id,me);return h("button",{type:"button",class:"proxima",onclick:()=>abrir(p.id)},
-    h("span",{class:"k",text:"A tua próxima prova"}),h("span",{class:"t",text:p.nome}),h("span",{class:"s",text:dataLonga(p.data)+" · "+faltam(p.data)+" · "+(e==="inscrito"?"inscrito":"ainda sem inscrição")+(x.percurso?" · "+x.percurso:"")}),
+    h("span",{class:"k",text:eTreino(p)?"O teu próximo treino":"A tua próxima prova"}),h("span",{class:"t",text:p.nome}),h("span",{class:"s",text:dataLonga(p.data)+(p.hora?" às "+p.hora:"")+" · "+faltam(p.data)+(eTreino(p)?(p.nota?" · "+p.nota:""):" · "+(e==="inscrito"?"inscrito":"ainda sem inscrição"))+(x.percurso?" · "+x.percurso:"")}),
     ...(()=>{const outros=Object.keys(pres[p.id]||{}).filter(id=>id!==me&&foiA(p.id,id)).map(nomeDe);const dias=Math.round((parseD(p.data)-hoje())/864e5);
       if(dias>=0&&dias<=15&&coordsDe(p)&&!meteo[p.id])previsao(p);const m=meteo[p.id];
       return [outros.length?h("span",{class:"s",text:"Contigo: "+outros.join(", ")}):null,m&&m.estado==="ok"?h("span",{class:"s mt",text:(METEO[m.cod]||"")+" · "+Math.round(m.min)+"–"+Math.round(m.max)+" °C"+(m.chuva!=null?" · chuva "+m.chuva+"%":"")}):null].filter(Boolean)})())})():null;
@@ -692,7 +700,7 @@ function draw(){
     " Distância em linha recta até ao centro do concelho da prova, por isso é aproximada."+(filtroRaio&&semLocal?" "+semLocal+(semLocal===1?" prova sem local conhecido fica":" provas sem local conhecido ficam")+" de fora.":"")]:["Escolhe a tua localização ou o teu concelho para filtrar por distância. Fica só neste telemóvel."]));
   if(!$("concelhosList").options.length)$("concelhosList").replaceChildren(...LUG.c.map(c=>h("option",{value:c[4]+" ("+c[1]+")"})));
   {const nf=(filtroRaio&&casa?1:0)+($("fDistrito").value?1:0)+($("fMes").value?1:0);$("maisBtn").textContent=nf?"Filtros ("+nf+")":"Filtros";$("maisBtn").classList.toggle("on",!!nf)}
-  const todas=fut.filter(p=>naReg(p)&&(!filtroRaio||!casa||(kmAte(p)!=null&&kmAte(p)<=filtroRaio))&&(!filtroTipos.size||tiposDe(p).some(t=>filtroTipos.has(t)))&&(!fd||p.distrito===fd)&&(!fm||p.data.slice(0,7)===fm)&&(!q||[p.nome,p.concelho,p.distrito].join(" ").toLowerCase().includes(q)));
+  const todas=fut.filter(p=>!eTreino(p)&&naReg(p)&&(!filtroRaio||!casa||(kmAte(p)!=null&&kmAte(p)<=filtroRaio))&&(!filtroTipos.size||tiposDe(p).some(t=>filtroTipos.has(t)))&&(!fd||p.distrito===fd)&&(!fm||p.data.slice(0,7)===fm)&&(!q||[p.nome,p.concelho,p.distrito].join(" ").toLowerCase().includes(q)));
   if(vistaCal)calendario(todas,$("todasList"));else listaPorMes(todas,$("todasList"),fut.length?"Nenhuma prova com estes filtros.":"Ainda não há provas.");
   fillSel($("fMes"),"Todos os meses",[...new Set(fut.map(p=>p.data.slice(0,7)))].sort().map(m=>[m,MESES[+m.slice(5)-1]+" "+m.slice(0,4)]));
   $("view-nova").querySelectorAll("input,select,button").forEach(el=>el.disabled=!podeMarcar());
@@ -842,11 +850,25 @@ $("conviteCopy").addEventListener("click",()=>copiar(textoConvite(),null));
 $("conviteShare").addEventListener("click",()=>{if(navigator.share)navigator.share({title:"Dorsal"+(grupoNome?" · "+grupoNome:""),text:textoConvite()}).catch(()=>{});else copiar(textoConvite(),null)});
 document.querySelectorAll("#vistaSeg button").forEach(b=>b.addEventListener("click",()=>{vistaCal=b.dataset.v==="cal";store.set("dorsal.vista",vistaCal?"cal":null);draw()}));
 $("nDistrito").replaceChildren(h("option",{value:"",text:"Escolher"}),...DISTRITOS.map(d=>h("option",{value:d,text:d})));
+let novaTipo="prova";
+function mostrarNovaTipo(){const t=novaTipo==="treino";for(const b of $("novaTipo").children)b.setAttribute("aria-pressed",String(b.dataset.t===novaTipo));
+  document.querySelectorAll("#novaForm .sotreino").forEach(x=>x.hidden=!t);document.querySelectorAll("#novaForm .soprova").forEach(x=>x.hidden=t);
+  $("nHora").required=t;$("nNomeL").textContent=t?"Nome do treino":"Nome da prova";$("nNome").placeholder=t?"Por exemplo: Longo de sábado em Sintra":"";
+  $("nDistL").textContent=t?"Distância e D+ previstos":"Distâncias (por exemplo 12K, 25K, caminhada 8K)";$("nDist").placeholder=t?"16 km, 700 D+":"";
+  $("nInfoL").textContent=t?"Link do percurso (Strava, Wikiloc…)":"Link com mais informação";$("novaBtn").textContent=t?"Marcar treino":"Acrescentar prova";
+  $("nData").min=t?hojeISO():""}
+$("novaTipo").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;novaTipo=b.dataset.t;mostrarNovaTipo()});
 $("novaForm").addEventListener("submit",async e=>{e.preventDefault();if(!podeMarcar())return;
-  const nome=$("nNome").value.trim(),data=$("nData").value;if(!nome||!data)return;
-  const id=(nome.normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,60)||"prova")+"-"+data;
-  const body={id,nome,data,distrito:$("nDistrito").value,concelho:$("nConcelho").value.trim(),distancias:$("nDist").value.trim(),inscricao:valid($("nInsc").value.trim())||"",info:valid($("nInfo").value.trim())||"",fonte:"grupo",grupo,criado_por:me};
-  try{await api("provas",{method:"POST",prefer:"return=minimal",body});$("novaForm").reset();$("novaMsg").textContent="";toast("Prova acrescentada");tab="todas";await carregar()}
+  const nome=$("nNome").value.trim(),data=$("nData").value,treino=novaTipo==="treino";if(!nome||!data)return;
+  if(treino&&!/^\d{2}:\d{2}$/.test($("nHora").value)){$("novaMsg").textContent="Falta a hora do treino.";return}
+  const id=(treino?"treino-":"")+(nome.normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,50)||"prova")+"-"+data+(treino?"-"+$("nHora").value.replace(":","")+"-"+grupo.slice(0,4):"");
+  const body={id,nome,data,distrito:$("nDistrito").value,concelho:$("nConcelho").value.trim(),distancias:$("nDist").value.trim(),inscricao:treino?"":(valid($("nInsc").value.trim())||""),info:valid($("nInfo").value.trim())||"",fonte:treino?"treino":"grupo",grupo,criado_por:me};
+  if(treino){body.hora=$("nHora").value;body.nota=$("nPonto").value.trim().slice(0,120)}
+  try{await api("provas",{method:"POST",prefer:"return=minimal",body});$("novaForm").reset();$("novaMsg").textContent="";
+    if(treino){try{await api("presencas",{method:"POST",prefer:"resolution=merge-duplicates,return=minimal",body:{grupo,membro_id:me,prova_id:id,estado:"vou",atualizado:new Date().toISOString()}})}catch(_){}
+      fetch(FN,{method:"POST",headers:fnHeaders(),body:JSON.stringify({tipo:"treino",prova_id:id,membro_id:me}),keepalive:true}).catch(()=>{});
+      toast("Treino marcado. O grupo vai ser avisado.");tab="grupo"}else{toast("Prova acrescentada");tab="todas"}
+    novaTipo="prova";mostrarNovaTipo();await carregar()}
   catch(err){$("novaMsg").textContent=err.status===409?"Essa prova já existe nessa data.":"Não foi possível guardar. Tenta outra vez."}});
 
 let ultimaAberta=provaAberta();
