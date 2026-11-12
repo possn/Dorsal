@@ -10,7 +10,8 @@ $$;
 
 create table if not exists public.grupos (
   codigo text primary key check (codigo ~ '^[a-z0-9]{6,40}$'),
-  nome text not null default '',
+  nome text not null default '' check (char_length(nome) <= 40),
+  logo text not null default '' check (char_length(logo) <= 60000),  -- imagem pequena em data URL
   criado_em timestamptz not null default now()
 );
 
@@ -68,6 +69,8 @@ alter table public.cliques enable row level security;
 
 drop policy if exists grupos_ler on public.grupos;
 create policy grupos_ler on public.grupos for select using (codigo = public.grupo_atual());
+drop policy if exists grupos_alterar on public.grupos;
+create policy grupos_alterar on public.grupos for update using (codigo = public.grupo_atual()) with check (codigo = public.grupo_atual());
 
 drop policy if exists provas_ler on public.provas;
 create policy provas_ler on public.provas for select using (grupo is null or grupo = public.grupo_atual());
@@ -99,4 +102,5 @@ create policy cliques_criar on public.cliques for insert with check (grupo = pub
 
 grant select, insert, update, delete on public.provas, public.membros, public.presencas to anon;
 grant select on public.grupos to anon;
+grant update (nome, logo) on public.grupos to anon;
 grant select, insert on public.cliques to anon;

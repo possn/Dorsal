@@ -11,7 +11,7 @@ function h(tag,attrs,...kids){const el=document.createElement(tag);if(attrs)for(
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{v==null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}}};
 
 // ---------- estado ----------
-let grupo=null,grupoNome="",me=null;
+let grupo=null,grupoNome="",grupoLogo="",me=null;
 let provas=[],membros={},pres={},cliques={},loaded=false;
 let tab=store.get("dorsal.tab")||"grupo",openMsg=null,confirmDel=null;
 
@@ -41,20 +41,20 @@ async function carregar(){
   try{
     const hoje=hojeISO();
     const reqs=[api("provas?select=*&data=gte."+hoje+"&order=data.asc,nome.asc")];
-    if(grupo)reqs.push(api("grupos?select=nome&codigo=eq."+grupo),api("membros?select=id,nome&order=nome.asc"),api("presencas?select=membro_id,prova_id,estado"),api("cliques?select=prova_id"));
+    if(grupo)reqs.push(api("grupos?select=nome,logo&codigo=eq."+grupo),api("membros?select=id,nome&order=nome.asc"),api("presencas?select=membro_id,prova_id,estado"),api("cliques?select=prova_id"));
     const [ps,gs,ms,pr,cl]=await Promise.all(reqs);
     provas=ps||[];
     if(grupo){
       if(!gs||!gs.length){status("Esse código de grupo não existe. Confirma o link que recebeste.");store.set("dorsal.grupo",null);grupo=null;membros={};pres={};}
-      else{grupoNome=gs[0].nome||"";membros={};for(const m of ms||[])membros[m.id]=m.nome;
+      else{grupoNome=gs[0].nome||"";grupoLogo=gs[0].logo||"";membros={};for(const m of ms||[])membros[m.id]=m.nome;
         pres={};for(const x of pr||[])(pres[x.prova_id]=pres[x.prova_id]||{})[x.membro_id]=x.estado;
         cliques={};for(const c of cl||[])cliques[c.prova_id]=(cliques[c.prova_id]||0)+1;
         me=store.get(chaveMe());if(me&&!membros[me]){me=null;store.set(chaveMe(),null)}
         if($("statusText").textContent.startsWith("Sem ligação"))status("");}
     }
-    store.set("dorsal.cache",JSON.stringify({provas,membros,pres,grupoNome}));
+    store.set("dorsal.cache",JSON.stringify({provas,membros,pres,grupoNome,grupoLogo}));
   }catch(e){
-    const c=store.get("dorsal.cache");if(c){try{const o=JSON.parse(c);provas=o.provas||[];membros=o.membros||{};pres=o.pres||{};grupoNome=o.grupoNome||""}catch(_){}}
+    const c=store.get("dorsal.cache");if(c){try{const o=JSON.parse(c);provas=o.provas||[];membros=o.membros||{};pres=o.pres||{};grupoNome=o.grupoNome||"";grupoLogo=o.grupoLogo||""}catch(_){}}
     else{try{provas=await (await fetch("provas.json")).json()}catch(_){}}
     status("Sem ligação ao servidor. Estás a ver a última versão guardada.");
   }
@@ -159,8 +159,12 @@ function draw(){
   $("entrar").hidden=!(ONLINE&&!grupo);
   $("quem").hidden=!(ONLINE&&grupo&&loaded&&!me);
   if(!$("quem").hidden){$("nomes").replaceChildren(...Object.entries(membros).sort((a,b)=>a[1].localeCompare(b[1],"pt")).map(([id,n])=>h("button",{type:"button",onclick:()=>{me=id;store.set(chaveMe(),id);draw()},text:n})))}
-  $("meBtn").hidden=!me;$("meBtn").textContent=me?nomeDe(me):"";
-  $("partilhar").hidden=!(ONLINE&&grupo);$("sair").hidden=!me;
+  $("meBtn").hidden=!me;
+  if(me){const logoOk=/^data:image\/(png|jpeg|webp);base64,/.test(grupoLogo);
+    $("meBtn").replaceChildren(logoOk?h("img",{class:"glogo",src:grupoLogo,alt:"",width:"30",height:"30"}):null,
+      h("span",{class:"gtxt"},grupoNome?h("span",{class:"gnome",text:grupoNome}):null,h("span",{class:"pnome",text:nomeDe(me)})));
+    $("meBtn").setAttribute("aria-label",(grupoNome?grupoNome+", ":"")+nomeDe(me))}
+  $("partilhar").hidden=!(ONLINE&&grupo);$("sair").hidden=!me;$("editarBtn").hidden=!podeMarcar();
   const aberta=provaAberta();
   $("lista").hidden=!!aberta;$("view-prova").hidden=!aberta;
   for(const t of ["grupo","todas","nova"]){$("tab-"+t).setAttribute("aria-selected",String(tab===t));$("view-"+t).hidden=tab!==t}
@@ -250,8 +254,20 @@ $("novoForm").addEventListener("submit",async e=>{e.preventDefault();const nome=
   try{const r=await api("membros",{method:"POST",prefer:"return=representation",body:{grupo,nome}});const m=r&&r[0];if(!m)throw 0;membros[m.id]=m.nome;me=m.id;store.set(chaveMe(),m.id);$("novoNome").value="";draw();toast("Bem-vindo, "+m.nome)}
   catch(err){toast("Não foi possível juntar-te. Tenta outra vez.")}});
 $("meBtn").addEventListener("click",()=>{tab="grupo";draw();window.scrollTo({top:0,behavior:"smooth"})});
+// ---------- editar grupo (nome e logótipo) ----------
+let novoLogo=null;
+function reduzirImagem(file){return new Promise((res,rej)=>{const img=new Image(),url=URL.createObjectURL(file);img.onload=()=>{const S=128,c=document.createElement("canvas");c.width=c.height=S;const x=c.getContext("2d");
+  const lado=Math.min(img.width,img.height);x.drawImage(img,(img.width-lado)/2,(img.height-lado)/2,lado,lado,0,0,S,S);URL.revokeObjectURL(url);
+  let d=c.toDataURL("image/webp",.8);if(!d.startsWith("data:image/webp"))d=c.toDataURL("image/jpeg",.82);res(d)};img.onerror=rej;img.src=url})}
+$("editarBtn").addEventListener("click",()=>{const p=$("editarGrupo");p.hidden=!p.hidden;if(!p.hidden){$("gNome").value=grupoNome;novoLogo=null;$("gPrev").src=grupoLogo||"icons/favicon.svg";$("gMsg").textContent="";p.scrollIntoView({behavior:"smooth",block:"center"})}});
+$("gFicheiro").addEventListener("change",async e=>{const f=e.target.files[0];if(!f)return;try{novoLogo=await reduzirImagem(f);$("gPrev").src=novoLogo}catch(_){$("gMsg").textContent="Não consegui ler essa imagem."}});
+$("gTirar").addEventListener("click",()=>{novoLogo="";$("gPrev").src="icons/favicon.svg"});
+$("gForm").addEventListener("submit",async e=>{e.preventDefault();if(!podeMarcar())return;const nome=$("gNome").value.trim().slice(0,40);if(!nome){$("gMsg").textContent="O grupo precisa de um nome.";return}
+  const body={nome};if(novoLogo!==null)body.logo=novoLogo;
+  try{await api("grupos?codigo=eq."+grupo,{method:"PATCH",prefer:"return=minimal",body});grupoNome=nome;if(novoLogo!==null)grupoLogo=novoLogo;$("editarGrupo").hidden=true;draw();toast("Grupo actualizado")}
+  catch(err){$("gMsg").textContent="Não foi possível guardar. Tenta outra vez."}});
 $("sair").addEventListener("click",()=>{me=null;store.set(chaveMe(),null);draw();window.scrollTo({top:0})});
-$("partilhar").addEventListener("click",()=>{const link=location.origin+location.pathname+"?g="+grupo;copiar("Junta-te aos "+(grupoNome||"Malte Runners")+" para combinarmos as provas de trail: "+link,null)});
+$("partilhar").addEventListener("click",()=>{const link=location.origin+location.pathname+"?g="+grupo;copiar("Junta-te"+(grupoNome?" aos "+grupoNome:" ao grupo")+" no Dorsal para combinarmos as provas de trail: "+link,null)});
 $("nDistrito").replaceChildren(h("option",{value:"",text:"Escolher"}),...DISTRITOS.map(d=>h("option",{value:d,text:d})));
 $("novaForm").addEventListener("submit",async e=>{e.preventDefault();if(!podeMarcar())return;
   const nome=$("nNome").value.trim(),data=$("nData").value;if(!nome||!data)return;
