@@ -205,7 +205,7 @@ function mapaTrilhos(pid,lista){let m=mapas[pid];const chave=lista.map(t=>t.memb
 function trilhosView(p){if(!grupo||!ONLINE||parseD(p.data)>hoje())return null;if(!trilhosP[p.id])carregarTrilhos(p.id);const T=trilhosP[p.id]||{estado:"a",lista:[]};
   const meuTem=T.lista.some(t=>t.membro_id===me);
   const imp=podeMarcar()?h("span",null,h("label",{class:"btn small"+(meuTem?"":" primary"),for:"gpx-"+p.id,text:meuTem?"Substituir o meu GPX":"Importar o meu GPX"}),
-    h("input",{id:"gpx-"+p.id,type:"file",accept:".gpx,application/gpx+xml,application/xml,text/xml",class:"vh",onchange:e=>{const f=e.target.files[0];e.target.value="";if(f)importarGPX(p.id,f)}})):null;
+    h("input",{id:"gpx-"+p.id,type:"file",class:"vh",onchange:e=>{const f=e.target.files[0];e.target.value="";if(f)importarGPX(p.id,f)}})):null;
   const linhas=T.lista.map((t,i)=>h("li",null,h("span",{class:"cor",style:"background:"+CORES[i%CORES.length]}),h("strong",{text:nomeDe(t.membro_id)+(t.membro_id===me?" (tu)":"")}),
     h("span",{class:"tdados",text:String(+t.km).replace(".",",")+" km · "+t.dplus+" m D+"+(t.duracao_s?" · "+hms(t.duracao_s)+" · "+ritmo(t.duracao_s,+t.km):"")}),
     t.membro_id===me?h("button",{class:"linkbtn",type:"button",onclick:async()=>{if(!confirm("Apagar o teu trilho desta prova?"))return;try{await api("trilhos?membro_id=eq."+me+"&prova_id=eq."+encodeURIComponent(p.id),{method:"DELETE"});temTrilho.delete(p.id+"|"+me);delete trilhosP[p.id];if(mapas[p.id]){try{mapas[p.id].map.remove()}catch(_){}delete mapas[p.id]}draw()}catch(_){toast("Não foi possível apagar.")}},text:"apagar"}):null));
@@ -293,7 +293,7 @@ function registoForm(){const v=id=>$(id)?$(id).value:"";
         if(regGPX){try{await guardarTrilho(id,regGPX)}catch(_){toast("A prova ficou registada, mas o trilho não foi guardado.")}}
         regAberto=false;regDraft={};regGPX=null;toast("Prova registada");await carregar()}
       catch(err){toast("Não foi possível registar. Tenta outra vez.")}finally{b.disabled=false}}},
-    h("div",{class:"full gpxpre"},h("label",{class:"btn small",for:"rGpx",text:regGPX?"GPX: "+regGPX.km.toString().replace(".",",")+" km ✓":"Preencher a partir de um GPX"}),h("input",{id:"rGpx",type:"file",accept:".gpx,application/gpx+xml,application/xml,text/xml",class:"vh",onchange:async e=>{const f=e.target.files[0];if(!f)return;
+    h("div",{class:"full gpxpre"},h("label",{class:"btn small",for:"rGpx",text:regGPX?"GPX: "+regGPX.km.toString().replace(".",",")+" km ✓":"Preencher a partir de um GPX"}),h("input",{id:"rGpx",type:"file",class:"vh",onchange:async e=>{const f=e.target.files[0];if(!f)return;
       try{const g=DorsalGPX.ler(await f.text());regGPX=g;if(g.nome&&!$("rNome").value)regDraft.rNome=g.nome;if(g.inicio)regDraft.rData=g.inicio.getFullYear()+"-"+String(g.inicio.getMonth()+1).padStart(2,"0")+"-"+String(g.inicio.getDate()).padStart(2,"0");
         regDraft.rKm=String(Math.round(g.km*10)/10).replace(".",",");regDraft.rD=String(g.dplus);if(g.duracao_s)regDraft.rTempo=hms(g.duracao_s);
         {const c=DorsalGPX.descodificar(g.pontos)[0],cc=c&&concelhoMaisPerto(c[0],c[1]);if(cc){regDraft.rConc=cc[4];regDraft.rDist=cc[1]}}draw()}
