@@ -13,6 +13,7 @@ const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},se
 
 // ---------- estado ----------
 let grupo=null,grupoNome="",grupoLogo="",me=null;
+let extra={},meteo={};
 let provas=[],membros={},pres={},cliques={},loaded=false;
 let filtroReg=store.get("dorsal.regiao")||"",filtroDist=store.get("dorsal.distrito")||"";
 let casa=null;try{casa=JSON.parse(store.get("dorsal.casa")||"null")}catch(_){}
@@ -47,20 +48,20 @@ async function carregar(){
   try{
     const hoje=hojeISO();
     const reqs=[api("provas?select=*&data=gte."+hoje+"&order=data.asc,nome.asc")];
-    if(grupo)reqs.push(api("grupos?select=nome,logo&codigo=eq."+grupo),api("membros?select=id,nome&order=nome.asc"),api("presencas?select=membro_id,prova_id,estado"),api("cliques?select=prova_id"));
+    if(grupo)reqs.push(api("grupos?select=nome,logo&codigo=eq."+grupo),api("membros?select=id,nome&order=nome.asc"),api("presencas?select=membro_id,prova_id,estado,percurso,boleia,lugares"),api("cliques?select=prova_id"));
     const [ps,gs,ms,pr,cl]=await Promise.all(reqs);
     provas=ps||[];
     if(grupo){
       if(!gs||!gs.length){status("Esse código de grupo não existe. Confirma o link que recebeste.");store.set("dorsal.grupo",null);grupo=null;membros={};pres={};}
       else{grupoNome=gs[0].nome||"";grupoLogo=gs[0].logo||"";membros={};for(const m of ms||[])membros[m.id]=m.nome;
-        pres={};for(const x of pr||[])(pres[x.prova_id]=pres[x.prova_id]||{})[x.membro_id]=x.estado;
+        pres={};extra={};for(const x of pr||[]){(pres[x.prova_id]=pres[x.prova_id]||{})[x.membro_id]=x.estado;(extra[x.prova_id]=extra[x.prova_id]||{})[x.membro_id]={percurso:x.percurso||"",boleia:x.boleia||"",lugares:x.lugares||0}}
         cliques={};for(const c of cl||[])cliques[c.prova_id]=(cliques[c.prova_id]||0)+1;
         me=store.get(chaveMe());if(me&&!membros[me]){me=null;store.set(chaveMe(),null)}
         if($("statusText").textContent.startsWith("Sem ligação"))status("");}
     }
-    store.set("dorsal.cache",JSON.stringify({provas,membros,pres,grupoNome,grupoLogo}));
+    store.set("dorsal.cache",JSON.stringify({provas,membros,pres,extra,grupoNome,grupoLogo}));
   }catch(e){
-    const c=store.get("dorsal.cache");if(c){try{const o=JSON.parse(c);provas=o.provas||[];membros=o.membros||{};pres=o.pres||{};grupoNome=o.grupoNome||"";grupoLogo=o.grupoLogo||""}catch(_){}}
+    const c=store.get("dorsal.cache");if(c){try{const o=JSON.parse(c);provas=o.provas||[];membros=o.membros||{};pres=o.pres||{};extra=o.extra||{};grupoNome=o.grupoNome||"";grupoLogo=o.grupoLogo||""}catch(_){}}
     else{try{provas=await (await fetch("provas.json")).json()}catch(_){}}
     status("Sem ligação ao servidor. Estás a ver a última versão guardada.");
   }
@@ -99,7 +100,10 @@ const podeMarcar=()=>ONLINE&&grupo&&me;
 // ---------- mensagens ----------
 function mensagem(p){const q=quem(p.id),L=[];L.push(p.nome+" — "+dataLonga(p.data)+" ("+faltam(p.data)+")");
   const local=[p.concelho,p.distrito].filter(Boolean).join(", ");if(local)L.push("Local: "+local);if(p.distancias)L.push("Distâncias: "+p.distancias);
-  if(q.inscrito.length)L.push("Inscritos: "+q.inscrito.map(nomeDe).join(", "));if(q.vou.length)L.push("Vão: "+q.vou.map(nomeDe).join(", "));if(q.talvez.length)L.push("Talvez: "+q.talvez.map(nomeDe).join(", "));
+  const nP=id=>{const x=exDe(p.id,id);return nomeDe(id)+(x.percurso?" ("+x.percurso+")":"")};
+  if(q.inscrito.length)L.push("Inscritos: "+q.inscrito.map(nP).join(", "));if(q.vou.length)L.push("Vão: "+q.vou.map(nP).join(", "));
+  {const of=Object.keys(pres[p.id]||{}).filter(id=>exDe(p.id,id).boleia==="oferece"),pr=Object.keys(pres[p.id]||{}).filter(id=>exDe(p.id,id).boleia==="precisa");
+   if(of.length)L.push("Boleias: "+of.map(id=>nomeDe(id)+" ("+(exDe(p.id,id).lugares||0)+" lugares)").join(", "));if(pr.length)L.push("Precisam de boleia: "+pr.map(nomeDe).join(", "))}if(q.talvez.length)L.push("Talvez: "+q.talvez.map(nomeDe).join(", "));
   if(!temGente(p.id))L.push("Ainda ninguém marcou. Alguém alinha?");
   const i=valid(p.inscricao)||valid(p.info);if(i)L.push((valid(p.inscricao)?"Inscrição: ":"Informação: ")+i);return L.join("\n")}
 function resumo(){const lim=new Date(hoje().getTime()+42*864e5);const ps=futuras().filter(p=>parseD(p.data)<=lim&&temGente(p.id));
@@ -108,6 +112,26 @@ function resumo(){const lim=new Date(hoje().getTime()+42*864e5);const ps=futuras
     return "- "+d.getDate()+" de "+MESES[d.getMonth()]+", "+p.nome+(p.concelho?" ("+p.concelho+")":"")+": "+parts.join("; ")+(valid(p.inscricao)?"\n  "+p.inscricao:"")}).join("\n")}
 
 // ---------- acções ----------
+const exDe=(pid,id)=>(extra[pid]&&extra[pid][id])||{percurso:"",boleia:"",lugares:0};
+async function setExtra(pid,campos){if(!podeMarcar()||!(pres[pid]&&pres[pid][me]))return;const m=extra[pid]=extra[pid]||{};const antes=Object.assign({},exDe(pid,me));m[me]=Object.assign({},antes,campos);draw();
+  try{await api("presencas?membro_id=eq."+me+"&prova_id=eq."+encodeURIComponent(pid),{method:"PATCH",prefer:"return=minimal",body:campos})}catch(err){m[me]=antes;draw();toast("Não foi possível guardar. Tenta outra vez.")}}
+function icsDe(p){const d=p.data.replace(/-/g,""),d2=(()=>{const x=parseD(p.data);x.setDate(x.getDate()+1);return x.getFullYear()+String(x.getMonth()+1).padStart(2,"0")+String(x.getDate()).padStart(2,"0")})();
+  const esc=s=>String(s||"").replace(/[\\;,]/g,m=>"\\"+m).replace(/\n/g,"\\n");const url=valid(p.inscricao)||valid(p.info)||"";
+  return ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Dorsal//PT","BEGIN:VEVENT","UID:"+p.id+"@dorsal","DTSTAMP:"+new Date().toISOString().replace(/[-:]/g,"").slice(0,15)+"Z","DTSTART;VALUE=DATE:"+d,"DTEND;VALUE=DATE:"+d2,"SUMMARY:"+esc(p.nome),
+    "LOCATION:"+esc([p.concelho,p.distrito].filter(Boolean).join(", ")),"DESCRIPTION:"+esc(mensagem(p)),url?"URL:"+url:null,"BEGIN:VALARM","TRIGGER:-P2D","ACTION:DISPLAY","DESCRIPTION:"+esc(p.nome),"END:VALARM","END:VEVENT","END:VCALENDAR"].filter(Boolean).join("\r\n")}
+function partilhar(p){const url=location.origin+location.pathname+"#p="+encodeURIComponent(p.id);const txt=mensagem(p);
+  if(navigator.share)navigator.share({title:p.nome,text:txt,url}).catch(()=>{});else copiar(txt+"\n"+url,null)}
+const METEO={0:"céu limpo",1:"pouco nublado",2:"parcialmente nublado",3:"nublado",45:"nevoeiro",48:"nevoeiro",51:"chuvisco",53:"chuvisco",55:"chuvisco forte",61:"chuva fraca",63:"chuva",65:"chuva forte",66:"chuva gelada",67:"chuva gelada",71:"neve fraca",73:"neve",75:"neve forte",80:"aguaceiros",81:"aguaceiros",82:"aguaceiros fortes",95:"trovoada",96:"trovoada com granizo",99:"trovoada com granizo"};
+function previsao(p){const dias=Math.round((parseD(p.data)-hoje())/864e5);const c=coordsDe(p);
+  if(dias<0||dias>15||!c)return h("p",{class:"hint",text:dias>15?"A previsão do tempo aparece a partir de 16 dias antes da prova.":c?"":"Sem local conhecido para a previsão do tempo."});
+  const m=meteo[p.id];
+  if(!m){meteo[p.id]={estado:"a"};fetch("https://api.open-meteo.com/v1/forecast?latitude="+c[0]+"&longitude="+c[1]+"&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max&timezone=Europe%2FLisbon&start_date="+p.data+"&end_date="+p.data)
+    .then(r=>r.ok?r.json():Promise.reject()).then(j=>{const d=j.daily;meteo[p.id]={estado:"ok",cod:d.weather_code[0],max:d.temperature_2m_max[0],min:d.temperature_2m_min[0],chuva:d.precipitation_probability_max[0],vento:d.wind_speed_10m_max[0]};draw()})
+    .catch(()=>{meteo[p.id]={estado:"erro"};draw()});return h("p",{class:"hint",text:"A carregar a previsão do tempo…"})}
+  if(m.estado==="a")return h("p",{class:"hint",text:"A carregar a previsão do tempo…"});
+  if(m.estado==="erro")return h("p",{class:"hint",text:"Não foi possível obter a previsão do tempo."});
+  return h("div",{class:"meteo"},h("b",{text:Math.round(m.min)+"–"+Math.round(m.max)+" °C"}),h("span",{text:(METEO[m.cod]||"")+(m.chuva!=null?" · chuva "+m.chuva+"%":"")+(m.vento!=null?" · vento até "+Math.round(m.vento)+" km/h":"")}),
+    h("small",{text:"Previsão Open-Meteo para o centro do concelho"+(dias>7?"; a mais de uma semana é pouco fiável":"")+"."}))}
 async function setEstado(pid,e){if(!podeMarcar())return;const m=pres[pid]=pres[pid]||{};const antes=m[me];
   if(antes===e)delete m[me];else m[me]=e;draw();
   try{if(antes===e)await api("presencas?membro_id=eq."+me+"&prova_id=eq."+encodeURIComponent(pid),{method:"DELETE"});
@@ -146,7 +170,8 @@ function detalhe(pid){const box=$("view-prova");box.replaceChildren();
   const p=provas.find(x=>x.id===pid);
   if(!p){box.append(voltar,h("div",{class:"empty",text:loaded?"Esta prova já não está no calendário.":"A carregar…"}));return}
   const d=parseD(p.data),q=quem(p.id),insc=valid(p.inscricao),info=valid(p.info);
-  const pessoa=(id,k)=>h("li",{class:"pessoa "+k},h("span",{class:"nome",text:nomeDe(id)+(id===me?" (tu)":"")}));
+  const pessoa=(id,k)=>{const x=exDe(p.id,id);return h("li",{class:"pessoa "+k},h("span",{class:"nome",text:nomeDe(id)+(id===me?" (tu)":"")}),
+    h("span",{class:"ptag"},x.percurso?h("span",{text:x.percurso}):null,x.boleia==="oferece"?h("span",{class:"car",text:"🚗 "+(x.lugares?x.lugares+(x.lugares===1?" lugar":" lugares"):"leva carro")}):x.boleia==="precisa"?h("span",{class:"car precisa",text:"precisa de boleia"}):null))};
   const bloco=(k,titulo,ids,vazio)=>h("section",{class:"grupo-bloco "+k},h("h3",null,titulo+" ",h("span",{class:"n",text:String(ids.length)})),
     ids.length?h("ul",{class:"pessoas"},...ids.map(id=>pessoa(id,k))):h("p",{class:"hint",text:vazio}));
   let gente;
@@ -165,8 +190,23 @@ function detalhe(pid){const box=$("view-prova");box.replaceChildren();
         h("div",{class:"meta"},h("strong",{text:[p.concelho,p.distrito].filter(Boolean).join(", ")||"Local por confirmar"}),"  ·  "+dataLonga(p.data)+", "+faltam(p.data)+(p.nota?"  ·  "+p.nota:"")),
         p.distancias?h("div",{class:"dist"},...String(p.distancias).split(",").map(s=>s.trim()).filter(Boolean).map(s=>h("span",{text:s}))):null,
         h("div",{class:"links"},insc?h("a",{href:insc,target:"_blank",rel:"noopener",onclick:()=>cliqueInsc(p.id),text:"Inscrição ↗"}):h("span",{class:"hint",text:"Sem link de inscrição"}),info?h("a",{href:info,target:"_blank",rel:"noopener",text:"Informação ↗"}):null))),
+    previsao(p),
+    h("div",{class:"acoes"},
+      h("a",{class:"btn small",href:"data:text/calendar;charset=utf-8,"+encodeURIComponent(icsDe(p)),download:p.id+".ics",text:"Adicionar ao calendário"}),
+      h("button",{class:"btn small",type:"button",onclick:()=>partilhar(p),text:"Partilhar"}),
+      (p.concelho&&p.distrito)?h("a",{class:"btn small",href:"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(p.concelho+", "+p.distrito+", Portugal"),target:"_blank",rel:"noopener",text:"Ver no mapa"}):null),
     podeMarcar()?h("div",{class:"eu"},h("span",{class:"hint",text:"A tua presença"}),segDe(p)):null,
+    (podeMarcar()&&pres[p.id]&&pres[p.id][me])?(()=>{const x=exDe(p.id,me),ops=String(p.distancias||"").split(",").map(s=>s.trim()).filter(Boolean);
+      const selP=h("select",{"aria-label":"O teu percurso",onchange:e=>setExtra(p.id,{percurso:e.target.value})},h("option",{value:"",text:"Que percurso vais fazer?"}),...ops.map(o=>h("option",{value:o,text:o})),x.percurso&&!ops.includes(x.percurso)?h("option",{value:x.percurso,text:x.percurso}):null);selP.value=x.percurso;
+      const boleia=h("div",{class:"chips"},...[["","Vou por mim"],["oferece","Ofereço boleia"],["precisa","Preciso de boleia"]].map(([v,t])=>h("button",{type:"button",class:"chip-reg","aria-pressed":String(x.boleia===v),onclick:()=>setExtra(p.id,{boleia:v,lugares:v==="oferece"?(x.lugares||3):0})},t)));
+      const lug=x.boleia==="oferece"?h("label",{class:"lug"},"Lugares livres ",(()=>{const s=h("select",{onchange:e=>setExtra(p.id,{lugares:+e.target.value})},...[1,2,3,4,5,6,7].map(n=>h("option",{value:String(n),text:String(n)})));s.value=String(x.lugares||3);return s})()):null;
+      return h("div",{class:"plano"},h("strong",{text:"O teu plano"}),ops.length?selP:h("input",{placeholder:"Percurso (por exemplo 25K)",maxlength:"40",value:x.percurso,onchange:e=>setExtra(p.id,{percurso:e.target.value.trim()})}),boleia,lug)})():null,
     gente,
+    (()=>{if(!grupo)return null;const ofer=[],prec=[];for(const id of Object.keys(pres[p.id]||{})){const x=exDe(p.id,id);if(x.boleia==="oferece")ofer.push(id);if(x.boleia==="precisa")prec.push(id)}
+      if(!ofer.length&&!prec.length)return null;const livres=ofer.reduce((a,id)=>a+(exDe(p.id,id).lugares||0),0);
+      return h("section",{class:"grupo-bloco boleias"},h("h3",null,"Boleias ",h("span",{class:"n",text:livres+(livres===1?" lugar livre":" lugares livres")})),
+        ofer.length?h("p",null,h("strong",{text:"Oferecem: "}),ofer.map(id=>nomeDe(id)+" ("+(exDe(p.id,id).lugares||0)+")").join(", ")):null,
+        prec.length?h("p",null,h("strong",{text:"Precisam: "}),prec.map(nomeDe).join(", ")):null)})(),
     h("div",{class:"links"},h("button",{class:"linkbtn",onclick:()=>{openMsg=openMsg===p.id?null:p.id;draw()},text:openMsg===p.id?"Fechar mensagem":"Mensagem para o grupo"})),
     msgDe(p)))}
 function listaPorMes(ps,box,vazio){box.replaceChildren();if(!ps.length){box.append(h("div",{class:"empty",text:vazio}));return}
@@ -192,7 +232,11 @@ function draw(){
   const fut=futuras();const grp=fut.filter(p=>temGente(p.id));
   $("nGrupo").textContent=loaded?grp.length:"";$("nTodas").textContent=loaded?fut.length:"";
   if(!loaded){$("view-grupo").replaceChildren(h("div",{class:"empty",text:"A carregar as provas…"}));return}
+  const minhas=me?fut.filter(p=>pres[p.id]&&(pres[p.id][me]==="inscrito"||pres[p.id][me]==="vou")):[];
+  const banner=minhas.length?(()=>{const p=minhas[0],e=pres[p.id][me],x=exDe(p.id,me);return h("button",{type:"button",class:"proxima",onclick:()=>abrir(p.id)},
+    h("span",{class:"k",text:"A tua próxima prova"}),h("span",{class:"t",text:p.nome}),h("span",{class:"s",text:dataLonga(p.data)+" · "+faltam(p.data)+" · "+(e==="inscrito"?"inscrito":"ainda sem inscrição")+(x.percurso?" · "+x.percurso:"")}))})():null;
   listaPorMes(grp,$("view-grupo"),podeMarcar()?"Ainda ninguém marcou presença. Vai a Todas e carrega em Vou, Inscrito ou Talvez.":"Quando entrares no grupo, aqui aparecem as provas a que o grupo vai.");
+  if(banner)$("view-grupo").prepend(banner);
   const reg=REGIOES.find(r=>r[0]===filtroReg),naReg=p=>!reg||reg[2].includes(p.distrito);
   $("regioes").replaceChildren(...[["","Todo o país",null],...REGIOES].map(([id,nome])=>{const n=id?fut.filter(p=>REGIOES.find(r=>r[0]===id)[2].includes(p.distrito)).length:fut.length;
     return h("button",{type:"button",class:"chip-reg","aria-pressed":String(filtroReg===id),onclick:()=>{filtroReg=id;filtroDist="";store.set("dorsal.regiao",id||null);store.set("dorsal.distrito",null);$("fDistrito").value="";draw()}},nome+" ",h("span",{class:"n",text:String(n)}))}));

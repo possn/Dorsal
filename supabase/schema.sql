@@ -49,6 +49,9 @@ create table if not exists public.presencas (
   membro_id uuid not null references public.membros(id) on delete cascade,
   prova_id text not null references public.provas(id) on delete cascade,
   estado text not null check (estado in ('inscrito','vou','talvez')),
+  percurso text not null default '' check (char_length(percurso) <= 40),
+  boleia text not null default '' check (boleia in ('', 'oferece', 'precisa')),
+  lugares smallint not null default 0 check (lugares between 0 and 8),
   atualizado timestamptz not null default now(),
   primary key (membro_id, prova_id)
 );

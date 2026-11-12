@@ -178,4 +178,21 @@ input,select{padding:9px 10px;border:1px solid var(--line);border-radius:6px;bac
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chip-reg:disabled{opacity:.45}
 #maisBtn{margin-bottom:4px}
+.acoes{display:flex;flex-wrap:wrap;gap:8px}
+.meteo{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 14px}
+.meteo b{font-family:var(--display);font-size:1.5rem;font-variant-numeric:tabular-nums}
+.meteo small{flex-basis:100%;color:var(--muted);font-size:.78rem}
+.plano{display:flex;flex-direction:column;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.plano select,.plano input{max-width:320px}
+.lug{display:flex;align-items:center;gap:8px;font-size:.92rem}
+.lug select{width:auto}
+.ptag{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;font-size:.8rem;color:var(--muted)}
+.ptag .car{color:var(--green);font-weight:600}
+.ptag .car.precisa{color:var(--accent)}
+.boleias{border-left:4px solid var(--green)}
+.boleias p{margin:4px 0 0}
+.proxima{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;text-align:left;background:var(--fg);color:var(--bg);border:0;border-radius:10px;padding:14px 16px;margin:4px 0 10px;border-left:6px solid var(--accent)}
+.proxima .k{font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;opacity:.75;font-weight:600}
+.proxima .t{font-family:var(--display);font-weight:700;font-size:1.45rem;line-height:1.1}
+.proxima .s{font-size:.88rem;opacity:.85}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:6px;font-weight:600;z-index:10}
