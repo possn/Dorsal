@@ -15,6 +15,10 @@ const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},se
 let grupo=null,grupoNome="",grupoLogo="",me=null;
 let provas=[],membros={},pres={},cliques={},loaded=false;
 let filtroReg=store.get("dorsal.regiao")||"",filtroDist=store.get("dorsal.distrito")||"";
+let casa=null;try{casa=JSON.parse(store.get("dorsal.casa")||"null")}catch(_){}
+let filtroRaio=+(store.get("dorsal.raio")||0);let filtroTipos=new Set((store.get("dorsal.tipos")||"").split("|").filter(Boolean));
+const TIPOS_ORDEM=["Caminhada","Trail kids","Trail curto","Trail longo","Trail ultra","Skyrunning","Backyard"];
+const RAIOS=[5,10,15,20,50,100];
 let tab=store.get("dorsal.tab")||"grupo",openMsg=null,confirmDel=null;
 
 // ---------- código do grupo ----------
@@ -62,6 +66,20 @@ async function carregar(){
   }
   loaded=true;draw();
 }
+
+// ---------- localização ----------
+const LUG=window.DORSAL_LUGARES||{c:[],l:[]};
+const norm=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z ]/g,"").replace(/\s+/g," ").trim();
+const geoMemo={};
+function coordsDe(p){if(!p.distrito||!p.concelho)return null;const k=p.concelho+"|"+p.distrito;if(k in geoMemo)return geoMemo[k];
+  const nome=norm(p.concelho),base=norm(p.concelho.replace(/\s*\(.*\)/,"")),dentro=[...p.concelho.matchAll(/\(([^)]+)\)/g)].map(m=>norm(m[1]));
+  const ordem=[[LUG.c,nome],[LUG.c,base],[LUG.l,nome],[LUG.l,base],...dentro.map(d=>[LUG.c,d]),...dentro.map(d=>[LUG.l,d])];
+  let r=null;for(const [tab,c] of ordem){const f=tab.find(x=>x[0]===c&&x[1]===p.distrito);if(f){r=[f[2],f[3]];break}}
+  return geoMemo[k]=r}
+function distKm(a,b){const R=6371,rad=x=>x*Math.PI/180,dLa=rad(b[0]-a[0]),dLo=rad(b[1]-a[1]);const s=Math.sin(dLa/2)**2+Math.cos(rad(a[0]))*Math.cos(rad(b[0]))*Math.sin(dLo/2)**2;return 2*R*Math.asin(Math.sqrt(s))}
+function kmAte(p){if(!casa)return null;const c=coordsDe(p);return c?distKm([casa.lat,casa.lon],c):null}
+function concelhoMaisPerto(lat,lon){let best=null,bd=1e9;for(const c of LUG.c){const d=distKm([lat,lon],[c[2],c[3]]);if(d<bd){bd=d;best=c}}return best}
+function definirCasa(c){casa=c;store.set("dorsal.casa",c?JSON.stringify(c):null);if(c&&!filtroRaio){filtroRaio=50;store.set("dorsal.raio","50")}draw()}
 
 // ---------- utilitários ----------
 function parseD(s){const[y,m,d]=String(s).split("-").map(Number);return new Date(y,m-1,d)}
@@ -119,7 +137,7 @@ function card(p){const d=parseD(p.data),q=quem(p.id);
   return h("article",{class:"card"},
     h("div",{class:"bib","aria-label":dataLonga(p.data)},h("div",{class:"d",text:d.getDate()}),h("div",{class:"m",text:MESES[d.getMonth()].slice(0,3)}),h("div",{class:"w",text:DIAS[d.getDay()]})),
     h("div",{class:"info"},h("h3",null,h("button",{class:"titlebtn",onclick:()=>abrir(p.id),text:p.nome})),
-      h("div",{class:"meta"},h("strong",{text:[p.concelho,p.distrito].filter(Boolean).join(", ")||"Local por confirmar"}),"  ·  "+faltam(p.data)+(p.nota?"  ·  "+p.nota:"")),
+      h("div",{class:"meta"},h("strong",{text:[p.concelho,p.distrito].filter(Boolean).join(", ")||"Local por confirmar"}),"  ·  "+faltam(p.data)+(kmAte(p)!=null?"  ·  ≈ "+Math.round(kmAte(p))+" km de casa":"")+(p.nota?"  ·  "+p.nota:"")),
       p.distancias?h("div",{class:"dist"},...String(p.distancias).split(",").map(s=>s.trim()).filter(Boolean).map(s=>h("span",{text:s}))):null,
       people.childNodes.length?people:null,seg,links,msg,
       n?h("div",{class:"owner",text:n+(n===1?" clique":" cliques")+" do grupo no link de inscrição"}):null))}
@@ -182,7 +200,19 @@ function draw(){
   fillSel($("fDistrito"),reg?"Todos os distritos de "+(reg[0]==="ilhas"?"Açores e Madeira":reg[1]):"Todos os distritos",[...new Set(fut.filter(naReg).map(p=>p.distrito).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"pt")).map(x=>[x,x]));
   if(filtroDist&&[...$("fDistrito").options].some(o=>o.value===filtroDist))$("fDistrito").value=filtroDist;
   const q=$("q").value.trim().toLowerCase(),fd=$("fDistrito").value,fm=$("fMes").value;
-  const todas=fut.filter(p=>naReg(p)&&(!fd||p.distrito===fd)&&(!fm||p.data.slice(0,7)===fm)&&(!q||[p.nome,p.concelho,p.distrito].join(" ").toLowerCase().includes(q)));
+  // filtros extra: distância e tipo de percurso
+  const tiposDe=p=>String(p.distancias||"").split(",").map(s=>s.trim()).filter(Boolean);
+  const tiposExist=[...new Set(fut.flatMap(tiposDe))].sort((a,b)=>{const ia=TIPOS_ORDEM.indexOf(a),ib=TIPOS_ORDEM.indexOf(b);return (ia<0?99:ia)-(ib<0?99:ib)||a.localeCompare(b,"pt")});
+  $("tipos").replaceChildren(...tiposExist.map(t=>h("button",{type:"button",class:"chip-reg","aria-pressed":String(filtroTipos.has(t)),onclick:()=>{filtroTipos.has(t)?filtroTipos.delete(t):filtroTipos.add(t);store.set("dorsal.tipos",[...filtroTipos].join("|")||null);draw()}},t)));
+  const semTipo=fut.filter(p=>!tiposDe(p).length).length;
+  $("tiposTxt").textContent=filtroTipos.size?(semTipo?semTipo+(semTipo===1?" prova ainda sem percursos publicados fica":" provas ainda sem percursos publicados ficam")+" de fora.":""):"Escolhe um ou mais. Sem escolha, aparecem todas.";
+  $("raios").replaceChildren(...[0,...RAIOS].map(r=>h("button",{type:"button",class:"chip-reg","aria-pressed":String(filtroRaio===r),disabled:!casa&&r?true:null,onclick:()=>{filtroRaio=r;store.set("dorsal.raio",r?String(r):null);draw()}},r?"até "+r+" km":"Qualquer distância")));
+  const semLocal=fut.filter(p=>!coordsDe(p)).length;
+  $("casaTxt").replaceChildren(...(casa?["Casa: ",h("strong",{text:casa.nome}),". ",h("button",{type:"button",class:"linkbtn",onclick:()=>{definirCasa(null);filtroRaio=0;store.set("dorsal.raio",null);draw()},text:"Esquecer"}),
+    " Distância em linha recta até ao centro do concelho da prova, por isso é aproximada."+(filtroRaio&&semLocal?" "+semLocal+(semLocal===1?" prova sem local conhecido fica":" provas sem local conhecido ficam")+" de fora.":"")]:["Escolhe a tua localização ou o teu concelho para filtrar por distância. Fica só neste telemóvel."]));
+  if(!$("concelhosList").options.length)$("concelhosList").replaceChildren(...LUG.c.map(c=>h("option",{value:c[4]+" ("+c[1]+")"})));
+  const nExtra=(filtroRaio&&casa?1:0)+(filtroTipos.size?1:0);$("maisBtn").textContent=nExtra?"Mais filtros ("+nExtra+")":"Mais filtros";
+  const todas=fut.filter(p=>naReg(p)&&(!filtroRaio||!casa||(kmAte(p)!=null&&kmAte(p)<=filtroRaio))&&(!filtroTipos.size||tiposDe(p).some(t=>filtroTipos.has(t)))&&(!fd||p.distrito===fd)&&(!fm||p.data.slice(0,7)===fm)&&(!q||[p.nome,p.concelho,p.distrito].join(" ").toLowerCase().includes(q)));
   listaPorMes(todas,$("todasList"),fut.length?"Nenhuma prova com estes filtros.":"Ainda não há provas.");
   fillSel($("fMes"),"Todos os meses",[...new Set(fut.map(p=>p.data.slice(0,7)))].sort().map(m=>[m,MESES[+m.slice(5)-1]+" "+m.slice(0,4)]));
   $("view-nova").querySelectorAll("input,select,button").forEach(el=>el.disabled=!podeMarcar());
@@ -254,6 +284,12 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("menu").hidden)a
 // ---------- eventos ----------
 document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{tab=b.dataset.tab;store.set("dorsal.tab",tab);draw()}));
 ["q","fMes"].forEach(id=>$(id).addEventListener("input",draw));
+$("maisBtn").addEventListener("click",()=>{const m=$("maisFiltros");m.hidden=!m.hidden;$("maisBtn").setAttribute("aria-expanded",String(!m.hidden))});
+$("geoBtn").addEventListener("click",()=>{if(!navigator.geolocation){toast("Este telemóvel não dá a localização.");return}$("geoBtn").disabled=true;$("geoBtn").textContent="A localizar…";
+  navigator.geolocation.getCurrentPosition(pos=>{const lat=+pos.coords.latitude.toFixed(3),lon=+pos.coords.longitude.toFixed(3),c=concelhoMaisPerto(lat,lon);$("geoBtn").disabled=false;$("geoBtn").textContent="Usar a minha localização";definirCasa({lat,lon,nome:"localização actual"+(c?", perto de "+c[4]:"")})},
+    err=>{$("geoBtn").disabled=false;$("geoBtn").textContent="Usar a minha localização";toast(err.code===1?"Localização recusada. Escreve o teu concelho.":"Não consegui a localização. Escreve o teu concelho.")},{enableHighAccuracy:false,timeout:10000,maximumAge:3600000})});
+$("casaIn").addEventListener("change",()=>{const v=$("casaIn").value,m=v.match(/^(.*?)\s*\(([^)]+)\)\s*$/);const nome=norm(m?m[1]:v),dist=m?m[2]:null;
+  const c=LUG.c.find(x=>x[0]===nome&&(!dist||x[1]===dist));if(!c){toast("Não encontrei esse concelho.");return}$("casaIn").value="";definirCasa({lat:c[2],lon:c[3],nome:c[4]})});
 $("fDistrito").addEventListener("input",()=>{filtroDist=$("fDistrito").value;store.set("dorsal.distrito",filtroDist||null);draw()});
 $("resumoBtn").addEventListener("click",()=>{const r=$("resumo");r.hidden=!r.hidden;if(!r.hidden){const t=resumo();$("resumoText").value=t;$("resumoWa").href="https://wa.me/?text="+encodeURIComponent(t)}});
 $("resumoCopy").addEventListener("click",()=>copiar($("resumoText").value,$("resumoText")));

@@ -172,4 +172,10 @@ input,select{padding:9px 10px;border:1px solid var(--line);border-radius:6px;bac
 .chip-reg .n{color:var(--muted);font-weight:500;font-variant-numeric:tabular-nums}
 .chip-reg[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
 .chip-reg[aria-pressed="true"] .n{color:inherit;opacity:.75}
+.mais{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin:10px 0 4px;display:flex;flex-direction:column;gap:14px}
+.mf-bloco{display:flex;flex-direction:column;gap:8px}
+.mf-bloco .hint{margin:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip-reg:disabled{opacity:.45}
+#maisBtn{margin-bottom:4px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:6px;font-weight:600;z-index:10}
