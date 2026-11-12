@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="fundo" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#24332C"/><stop offset="1" stop-color="#111915"/></linearGradient>
+    <clipPath id="k"><rect x="96" y="136" width="320" height="256" rx="22"/></clipPath>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#fundo)"/>
+  <g transform="rotate(-6 256 264)">
+    <rect x="96" y="148" width="320" height="256" rx="22" fill="#000" opacity=".3"/>
+    <rect x="96" y="136" width="320" height="256" rx="22" fill="#FBF7EE"/>
+    <g clip-path="url(#k)">
+      <polygon points="96,392 96,312 170,256 226,300 296,222 416,318 416,392" fill="#86AE90"/>
+      <polygon points="96,392 96,350 166,292 214,326 292,240 416,356 416,392" fill="#2E6B43"/>
+      <polygon points="292,240 270,266 286,262 299,276 312,258" fill="#FBF7EE"/>
+      <path d="M150 392 C178 372 210 372 226 352 C242 332 236 316 256 302 C272 291 282 268 290 250" fill="none" stroke="#EE5A0F" stroke-width="11" stroke-linecap="round" stroke-dasharray="2 19"/>
+    </g>
+    <path d="M292 240 V196" stroke="#FBF7EE" stroke-width="6" stroke-linecap="round"/>
+    <path d="M294 196 L330 207 L294 220 Z" fill="#EE5A0F"/>
+    <rect x="96" y="136" width="320" height="34" fill="#EE5A0F" clip-path="url(#k)"/>
+    <g stroke="#C9CFC9" stroke-width="7" stroke-linecap="round" fill="none">
+      <path d="M116 126 L156 126 Q166 126 166 136 Q166 146 156 146 L124 146"/>
+      <path d="M396 126 L356 126 Q346 126 346 136 Q346 146 356 146 L388 146"/>
+    </g>
+  </g>
+</svg>
