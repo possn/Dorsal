@@ -13,7 +13,7 @@ const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},se
 
 // ---------- estado ----------
 let grupo=null,grupoNome="",grupoLogo="",me=null;
-let extra={},meteo={},passadas=[];
+let extra={},meteo={},passadas=[],nCom={},conv={};
 let provas=[],membros={},pres={},cliques={},loaded=false;
 let histTodas=false;
 let filtroReg=store.get("dorsal.regiao")||"",filtroDist=store.get("dorsal.distrito")||"";
@@ -56,8 +56,8 @@ async function carregar(){
   try{
     const hoje=hojeISO();
     const reqs=[api("provas?select=*&data=gte."+hoje+"&order=data.asc,nome.asc")];
-    if(grupo)reqs.push(api("grupos?select=nome,logo&codigo=eq."+grupo),api("membros?select=id,nome&order=nome.asc"),api("presencas?select=membro_id,prova_id,estado,percurso,boleia,lugares,tempo"),api("cliques?select=prova_id"));
-    const [ps,gs,ms,pr,cl]=await Promise.all(reqs);
+    if(grupo)reqs.push(api("grupos?select=nome,logo&codigo=eq."+grupo),api("membros?select=id,nome&order=nome.asc"),api("presencas?select=membro_id,prova_id,estado,percurso,boleia,lugares,tempo"),api("cliques?select=prova_id"),api("comentarios?select=prova_id").catch(()=>[]));
+    const [ps,gs,ms,pr,cl,co]=await Promise.all(reqs);
     provas=ps||[];
     if(grupo){
       if(!gs||!gs.length){status("Esse código de grupo não existe. Confirma o link que recebeste.");esquecerGrupo(grupo);store.set("dorsal.grupo",null);grupo=null;membros={};pres={};}
@@ -66,6 +66,7 @@ async function carregar(){
         {const ids=new Set(provas.map(p=>p.id)),falta=Object.keys(pres).filter(id=>!ids.has(id));passadas=[];
           if(falta.length){try{passadas=(await api("provas?select=*&order=data.desc&id=in.("+falta.map(i=>'"'+encodeURIComponent(i)+'"').join(",")+")"))||[]}catch(_){}}}
         cliques={};for(const c of cl||[])cliques[c.prova_id]=(cliques[c.prova_id]||0)+1;
+        nCom={};for(const c of co||[])nCom[c.prova_id]=(nCom[c.prova_id]||0)+1;{const a=provaAberta();if(a&&conv[a])carregarConversa(a)}
         me=store.get(chaveMe());if(me&&!membros[me]){me=null;store.set(chaveMe(),null)}
         if($("statusText").textContent.startsWith("Sem ligação"))status("");}
     }
@@ -124,6 +125,51 @@ function resumo(){const lim=new Date(hoje().getTime()+42*864e5);const ps=futuras
 // ---------- acções ----------
 const exDe=(pid,id)=>(extra[pid]&&extra[pid][id])||{percurso:"",boleia:"",lugares:0,tempo:""};
 function normTempo(v){v=String(v||"").trim().replace(/[hH]/,":").replace(/[mM']/,":").replace(/[sS"]/,"").replace(/\s+/g,"");if(!v)return"";const m=v.match(/^(\d{1,3}):(\d{1,2})(?::(\d{1,2}))?$/);if(!m||+m[2]>59||(m[3]&&+m[3]>59))return null;return +m[1]+":"+m[2].padStart(2,"0")+(m[3]!=null?":"+m[3].padStart(2,"0"):"")}
+// ---------- conversa por prova ----------
+function carregarConversa(pid){if(!ONLINE||!grupo)return;conv[pid]=conv[pid]||{estado:"a",lista:[]};
+  api("comentarios?select=id,membro_id,texto,criado_em&prova_id=eq."+encodeURIComponent(pid)+"&order=criado_em.asc").then(l=>{conv[pid]={estado:"ok",lista:l||[]};nCom[pid]=(l||[]).length;draw()}).catch(()=>{conv[pid].estado="erro";draw()})}
+function haQuanto(iso){const s=(Date.now()-new Date(iso).getTime())/1000;if(s<60)return"agora";if(s<3600)return"há "+Math.floor(s/60)+" min";if(s<86400)return"há "+Math.floor(s/3600)+" h";const d=new Date(iso);return d.getDate()+" "+MESES[d.getMonth()].slice(0,3)}
+let rascunho={};
+function conversa(p){if(!ONLINE||!grupo)return null;if(!conv[p.id])carregarConversa(p.id);const c=conv[p.id]||{estado:"a",lista:[]};
+  const lista=c.lista.length?h("ul",{class:"conv"},...c.lista.map(m=>h("li",{class:m.membro_id===me?"meu":null},h("div",{class:"cm-top"},h("strong",{text:nomeDe(m.membro_id)}),h("span",{class:"hint",text:haQuanto(m.criado_em)}),
+      m.membro_id===me?h("button",{class:"linkbtn",onclick:async()=>{try{await api("comentarios?id=eq."+m.id,{method:"DELETE"});carregarConversa(p.id)}catch(_){toast("Não foi possível apagar.")}},text:"apagar"}):null),h("p",{text:m.texto})))):
+    h("p",{class:"hint",text:c.estado==="a"?"A carregar…":c.estado==="erro"?"Não foi possível carregar a conversa.":"Ainda ninguém escreveu. Combina aqui o encontro, a boleia ou o jantar."});
+  let form=null;if(podeMarcar()){const ta=h("textarea",{rows:"2",maxlength:"500",placeholder:"Escreve para o grupo…","aria-label":"Mensagem",oninput:e=>{rascunho[p.id]=e.target.value}});ta.value=rascunho[p.id]||"";
+    form=h("form",{class:"cm-form",onsubmit:async e=>{e.preventDefault();const t=ta.value.trim();if(!t)return;const b=e.target.querySelector("button");b.disabled=true;
+      try{await api("comentarios",{method:"POST",prefer:"return=minimal",body:{grupo,prova_id:p.id,membro_id:me,texto:t.slice(0,500)}});rascunho[p.id]="";carregarConversa(p.id)}catch(_){toast("Não foi possível enviar.");b.disabled=false}}},ta,h("button",{class:"btn primary small",type:"submit",text:"Enviar"}))}
+  return h("section",{class:"grupo-bloco conversa"},h("h3",null,"Conversa ",h("span",{class:"n",text:String(c.lista.length||"")})),lista,form)}
+
+// ---------- plano de treino ----------
+const ALVO_LONGA={"Caminhada":120,"Trail curto":100,"Trail longo":180,"Skyrunning":150,"Trail ultra":300,"Backyard":300};
+function planoTreino(p,percurso,atual){const corrida=parseD(p.data),seg=new Date(hoje());seg.setDate(seg.getDate()-((seg.getDay()+6)%7));
+  const semanas=Math.floor((corrida-seg)/(7*864e5))+1;const alvo=ALVO_LONGA[percurso]||(/ultra/i.test(percurso)?300:/long/i.test(percurso)?180:100);
+  if(semanas<3)return{semanas,linhas:[],aviso:"Faltam menos de 3 semanas: já não é altura de aumentar a carga. Mantém corridas fáceis e descansa nos dois dias antes."};
+  const linhas=[];let longa=Math.max(30,atual),pico=0;const nTreino=semanas-2;
+  for(let w=1;w<=semanas;w++){const ini=new Date(seg);ini.setDate(ini.getDate()+(w-1)*7);let tipo,l;
+    if(w===semanas){tipo="Semana da prova";l=0}
+    else if(w===semanas-1){tipo="Afinar";l=Math.round(pico*.6/5)*5}
+    else if(w%4===0){tipo="Recuperação";l=Math.round(longa*.75/5)*5}
+    else{if(w>1)longa=Math.min(alvo,longa*1.1);tipo=longa>=alvo?"Pico":"Construção";l=Math.round(longa/5)*5;pico=Math.max(pico,l)}
+    linhas.push({w,ini,tipo,l})}
+  const aviso=pico<alvo?"Com "+nTreino+" semanas de treino, subindo cerca de 10% por semana, a corrida longa chega a "+pico+" min. O habitual para "+percurso.toLowerCase()+" é rondar "+alvo+" min: considera um percurso mais curto ou começar já com mais volume, se o teu histórico o permitir.":"";
+  return{semanas,linhas,aviso,alvo}}
+let planoAberto={};
+function planoView(p){if(!podeMarcar()||!(pres[p.id]&&pres[p.id][me]))return null;const x=exDe(p.id,me);if(parseD(p.data)<hoje())return null;
+  if(!x.percurso)return h("p",{class:"hint",text:"Escolhe o teu percurso em cima para veres um plano de treino até à prova."});
+  if(/kids/i.test(x.percurso))return null;
+  const atual=+(store.get("dorsal.longa")||60);const r=planoTreino(p,x.percurso,atual);
+  const inp=h("select",{"aria-label":"A tua corrida longa actual",onchange:e=>{store.set("dorsal.longa",e.target.value);draw()}},...[30,45,60,75,90,105,120,150,180,210,240].map(m=>h("option",{value:String(m),text:m+" min"})));inp.value=String([30,45,60,75,90,105,120,150,180,210,240].reduce((a,b)=>Math.abs(b-atual)<Math.abs(a-atual)?b:a));
+  const det=h("details",{class:"plano-treino"},h("summary",null,h("strong",{text:"Plano de treino até à prova"}),h("span",{class:"hint",text:" · "+r.semanas+(r.semanas===1?" semana":" semanas")})),
+    h("label",{class:"lug"},"A tua corrida longa hoje ",inp),
+    r.aviso?h("div",{class:"nota",text:r.aviso}):null,
+    r.linhas.length?h("table",{class:"pt"},h("thead",null,h("tr",null,h("th",{text:"Semana"}),h("th",{text:"Corrida longa"}),h("th",{text:"Resto da semana"}))),
+      h("tbody",null,...r.linhas.map(l=>h("tr",{class:l.tipo==="Recuperação"?"rec":l.tipo==="Semana da prova"?"prova":null},
+        h("td",null,h("b",{text:l.ini.getDate()+" "+MESES[l.ini.getMonth()].slice(0,3)}),h("small",{text:l.tipo})),
+        h("td",{text:l.tipo==="Semana da prova"?"A prova":l.l+" min"}),
+        h("td",{text:l.tipo==="Semana da prova"?"2 corridas fáceis curtas, descanso nos 2 dias antes":l.tipo==="Afinar"?"1 sessão curta de subidas, 1 fácil, 1 força leve":l.tipo==="Recuperação"?"2 fáceis, 1 força":"1 de subidas, 1–2 fáceis, 2 força"}))))):null,
+    h("p",{class:"hint"},"Exemplo genérico, sem conhecer o teu histórico nem lesões: a corrida longa sobe cerca de 10% por semana, alivia a cada 4.ª semana e baixa nas duas últimas. Fundamentos e fontes em ",h("a",{href:"#s=preparacao",text:"Preparação física"}),"."));
+  if(planoAberto[p.id])det.open=true;det.addEventListener("toggle",()=>{planoAberto[p.id]=det.open});return det}
+
 function historico(){if(!grupo||!passadas.length)return null;const ano=new Date().getFullYear();const foi=(pid,id)=>{const e=pres[pid]&&pres[pid][id];return e==="inscrito"||e==="vou"};
   const cont={};for(const p of passadas)if(p.data.startsWith(String(ano)))for(const id of Object.keys(pres[p.id]||{}))if(foi(p.id,id))cont[id]=(cont[id]||0)+1;
   const quadro=Object.entries(cont).sort((a,b)=>b[1]-a[1]||nomeDe(a[0]).localeCompare(nomeDe(b[0]),"pt"));
@@ -177,6 +223,7 @@ function card(p){const d=parseD(p.data),q=quem(p.id);
     insc?h("a",{href:insc,target:"_blank",rel:"noopener",onclick:()=>cliqueInsc(p.id),text:"Inscrição ↗"}):h("span",{class:"hint",text:"Sem link de inscrição"}),
     info?h("a",{href:info,target:"_blank",rel:"noopener",text:"Informação ↗"}):null,
     h("button",{class:"linkbtn",onclick:()=>abrir(p.id),text:ONLINE&&grupo?"Quem vai"+(temGente(p.id)?" ("+contagem(q)+")":""):"Abrir prova"}),
+    nCom[p.id]?h("button",{class:"linkbtn com",onclick:()=>abrir(p.id),text:"💬 "+nCom[p.id]}):null,
     (podeMarcar()&&p.grupo&&p.grupo===grupo)?h("button",{class:"linkbtn",onclick:()=>remover(p.id),text:confirmDel===p.id?"Confirmar remoção":"Remover"}):null);
   const n=cliques[p.id]||0,dias=Math.round((d-hoje())/864e5);
   return h("article",{class:"card"},
@@ -222,13 +269,15 @@ function detalhe(pid){const box=$("view-prova");box.replaceChildren();
       const boleia=h("div",{class:"chips"},...[["","Vou por mim"],["oferece","Ofereço boleia"],["precisa","Preciso de boleia"]].map(([v,t])=>h("button",{type:"button",class:"chip-reg","aria-pressed":String(x.boleia===v),onclick:()=>setExtra(p.id,{boleia:v,lugares:v==="oferece"?(x.lugares||3):0})},t)));
       const lug=x.boleia==="oferece"?h("label",{class:"lug"},"Lugares livres ",(()=>{const s=h("select",{onchange:e=>setExtra(p.id,{lugares:+e.target.value})},...[1,2,3,4,5,6,7].map(n=>h("option",{value:String(n),text:String(n)})));s.value=String(x.lugares||3);return s})()):null;
       return h("div",{class:"plano"},h("strong",{text:"O teu plano"}),ops.length?selP:h("input",{placeholder:"Percurso (por exemplo 25K)",maxlength:"40",value:x.percurso,onchange:e=>setExtra(p.id,{percurso:e.target.value.trim()})}),boleia,lug)})():null,
+    planoView(p),
     gente,
     (()=>{if(!grupo)return null;const ofer=[],prec=[];for(const id of Object.keys(pres[p.id]||{})){const x=exDe(p.id,id);if(x.boleia==="oferece")ofer.push(id);if(x.boleia==="precisa")prec.push(id)}
       if(!ofer.length&&!prec.length)return null;const livres=ofer.reduce((a,id)=>a+(exDe(p.id,id).lugares||0),0);
       return h("section",{class:"grupo-bloco boleias"},h("h3",null,"Boleias ",h("span",{class:"n",text:livres+(livres===1?" lugar livre":" lugares livres")})),
         ofer.length?h("p",null,h("strong",{text:"Oferecem: "}),ofer.map(id=>nomeDe(id)+" ("+(exDe(p.id,id).lugares||0)+")").join(", ")):null,
         prec.length?h("p",null,h("strong",{text:"Precisam: "}),prec.map(nomeDe).join(", ")):null)})(),
-    h("div",{class:"links"},h("button",{class:"linkbtn",onclick:()=>{openMsg=openMsg===p.id?null:p.id;draw()},text:openMsg===p.id?"Fechar mensagem":"Mensagem para o grupo"})),
+    conversa(p),
+    h("div",{class:"links"},h("button",{class:"linkbtn",onclick:()=>{openMsg=openMsg===p.id?null:p.id;draw()},text:openMsg===p.id?"Fechar mensagem":"Mensagem para o WhatsApp"})),
     msgDe(p)))}
 function listaPorMes(ps,box,vazio){box.replaceChildren();if(!ps.length){box.append(h("div",{class:"empty",text:vazio}));return}
   let cur="",list=null;for(const p of ps){const d=parseD(p.data),k=MESES[d.getMonth()]+" "+d.getFullYear();if(k!==cur){cur=k;box.append(h("h2",{class:"month",text:k}));list=h("div",{class:"list"});box.append(list)}list.append(card(p))}}
@@ -402,7 +451,8 @@ $("novaForm").addEventListener("submit",async e=>{e.preventDefault();if(!podeMar
 let ultimaAberta=provaAberta();
 window.addEventListener("hashchange",()=>{const a=provaAberta();if(a&&!ultimaAberta)history.replaceState({dorsal:1},"");ultimaAberta=a;draw();window.scrollTo({top:0})});
 draw();carregar();
-setInterval(()=>{if(document.visibilityState==="visible"&&ONLINE)carregar()},30000);
+const aEscrever=()=>{const a=document.activeElement;return !!a&&(a.tagName==="TEXTAREA"||(a.tagName==="INPUT"&&!/checkbox|radio|button/.test(a.type))||a.tagName==="SELECT")};
+setInterval(()=>{if(document.visibilityState==="visible"&&ONLINE&&!aEscrever())carregar()},30000);
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&ONLINE&&loaded)carregar()});
 if("serviceWorker" in navigator){const tinha=!!navigator.serviceWorker.controller;let recarregou=false;
   navigator.serviceWorker.addEventListener("controllerchange",()=>{if(tinha&&!recarregou){recarregou=true;location.reload()}});

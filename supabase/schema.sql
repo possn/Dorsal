@@ -126,3 +126,22 @@ begin
 end; $$;
 revoke all on function public.criar_grupo(text) from public;
 grant execute on function public.criar_grupo(text) to anon;
+
+-- Conversa por prova
+create table if not exists public.comentarios (
+  id bigint generated always as identity primary key,
+  grupo text not null references public.grupos(codigo) on delete cascade,
+  prova_id text not null,
+  membro_id uuid not null references public.membros(id) on delete cascade,
+  texto text not null check (char_length(btrim(texto)) between 1 and 500),
+  criado_em timestamptz not null default now()
+);
+create index if not exists comentarios_grupo_prova on public.comentarios(grupo, prova_id, criado_em);
+alter table public.comentarios enable row level security;
+drop policy if exists comentarios_ler on public.comentarios;
+create policy comentarios_ler on public.comentarios for select using (grupo = public.grupo_atual());
+drop policy if exists comentarios_criar on public.comentarios;
+create policy comentarios_criar on public.comentarios for insert with check (grupo = public.grupo_atual() and exists (select 1 from public.membros m where m.id = membro_id and m.grupo = public.grupo_atual()));
+drop policy if exists comentarios_apagar on public.comentarios;
+create policy comentarios_apagar on public.comentarios for delete using (grupo = public.grupo_atual());
+grant select, insert, delete on public.comentarios to anon;
