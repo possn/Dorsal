@@ -35,6 +35,8 @@ let adminEstado=null;
 const chaveAdmin=()=>"dorsal.admin."+grupo,adminTok=()=>store.get(chaveAdmin());
 async function verAdmin(){if(!grupo){adminEstado=null;return}try{adminEstado=await api("rpc/admin_estado",{method:"POST",body:{p_token:adminTok()||""}})}catch(_){adminEstado=null}}
 const souAdmin=()=>adminEstado==="admin";
+const ICS={"provas": "<path d=\"M3 19l5.5-8 3.5 4.5 2.5-3L21 19z\"/><circle cx=\"17\" cy=\"6\" r=\"2\"/>", "estatisticas": "<path d=\"M4 20V10M10 20V4M16 20v-7M22 20H2\"/>", "membros": "<circle cx=\"8\" cy=\"8\" r=\"3.2\"/><circle cx=\"16.5\" cy=\"9\" r=\"2.6\"/><path d=\"M2.5 19c.6-3.3 2.8-5 5.5-5s4.9 1.7 5.5 5M13.5 15.2c.9-.8 1.9-1.2 3-1.2 2.3 0 4 1.5 4.5 4.5\"/>", "mais": "<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 8v8M8 12h8\"/>", "ferramentas": "<path d=\"M14.5 6.5a4 4 0 0 0-5.4 5.1L3.5 17.2l3.3 3.3 5.6-5.6a4 4 0 0 0 5.1-5.4l-2.6 2.6-2.4-.6-.6-2.4z\"/>", "preparacao": "<path d=\"M13 4.5a1.8 1.8 0 1 0 0-.1M7 21l3-6 3 2v4M10 15l1-5 4 3 3 1M8 10l3-1\"/>", "nutricao": "<path d=\"M8 3v4M12 3v4M10 7v14M8 7h4a0 0 0 0 1 0 0v2a2 2 0 0 1-2 2 2 2 0 0 1-2-2zM17 3c-1.7 1-2.5 3-2.5 6s1 4 2.5 4v8\"/>", "equipamento": "<path d=\"M8 6V4h8v2M5 6h14l-1 15H6z\"/><path d=\"M9 11h6\"/>", "seguranca": "<path d=\"M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6z\"/><path d=\"M12 8v5M12 16h.01\"/>", "saude": "<path d=\"M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z\"/><path d=\"M8 11h2l1-2 2 4 1-2h2\"/>", "historia": "<path d=\"M5 4h10l4 4v12H5z\"/><path d=\"M15 4v4h4M8 12h8M8 16h6\"/>", "glossario": "<path d=\"M4 19V6a2 2 0 0 1 2-2h13v14H6a2 2 0 0 0-2 2zM19 18v3H6\"/><path d=\"M9 8h6\"/>", "privacidade": "<rect x=\"5\" y=\"10\" width=\"14\" height=\"10\" rx=\"2\"/><path d=\"M8 10V7a4 4 0 0 1 8 0v3\"/>"};
+function ic(n,txt){const sp=h("span",{class:"ic"});if(ICS[n]){sp.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true">'+ICS[n]+'</svg>'}else sp.textContent=txt||"";return sp}
 function gruposConhecidos(){try{return JSON.parse(store.get("dorsal.grupos")||"[]")}catch(_){return[]}}
 function lembrarGrupo(c,n){const l=gruposConhecidos().filter(x=>x.c!==c);l.unshift({c,n:n||""});store.set("dorsal.grupos",JSON.stringify(l.slice(0,20)))}
 function esquecerGrupo(c){store.set("dorsal.grupos",JSON.stringify(gruposConhecidos().filter(x=>x.c!==c)))}
@@ -579,9 +581,9 @@ function card(p){const d=parseD(p.data),q=quem(p.id);
   const insc=valid(p.inscricao),info=valid(p.info);
   const tr=eTreino(p);
   const links=h("div",{class:"links"},
-    insc?h("a",{href:insc,target:"_blank",rel:"noopener",onclick:()=>cliqueInsc(p.id),text:"Inscrição ↗"}):tr?null:h("span",{class:"hint",text:"Sem link de inscrição"}),
-    info?h("a",{href:info,target:"_blank",rel:"noopener",text:"Informação ↗"}):null,
-    h("button",{class:"linkbtn",onclick:()=>abrir(p.id),text:ONLINE&&grupo?"Quem vai"+(temGente(p.id)?" ("+contagem(q)+")":""):"Abrir prova"}),
+    insc?h("a",{href:insc,target:"_blank",rel:"noopener",onclick:()=>cliqueInsc(p.id),text:"Inscrição ↗"}):null,
+    info?h("a",{href:info,target:"_blank",rel:"noopener",text:"Info ↗"}):null,
+    h("button",{class:"linkbtn",onclick:()=>abrir(p.id),text:ONLINE&&grupo?"Quem vai"+(temGente(p.id)?" ("+(q.inscrito.length+q.vou.length+q.talvez.length)+")":""):"Abrir prova"}),
     nCom[p.id]?h("button",{class:"linkbtn com"+(novas[p.id]?" nova":""),onclick:()=>abrir(p.id),text:"💬 "+nCom[p.id]+(novas[p.id]?" · "+novas[p.id]+(novas[p.id]===1?" nova":" novas"):"")}):null,
     (podeMarcar()&&p.grupo&&p.grupo===grupo)?h("button",{class:"linkbtn",onclick:()=>remover(p.id),text:confirmDel===p.id?"Confirmar remoção":"Remover"}):null);
   const n=cliques[p.id]||0,dias=Math.round((d-hoje())/864e5);
@@ -590,8 +592,8 @@ function card(p){const d=parseD(p.data),q=quem(p.id);
     h("div",{class:"info"},tr?h("span",{class:"tagtreino",text:"Treino do grupo"+(p.hora?" · "+p.hora:"")}):null,h("h3",null,h("button",{class:"titlebtn",onclick:()=>abrir(p.id),text:p.nome})),
       tr&&p.nota?h("div",{class:"ponto",text:"📍 "+p.nota}):null,
       h("div",{class:"meta"},h("strong",{text:[p.concelho,p.distrito].filter(Boolean).join(", ")||"Local por confirmar"}),"  ·  ",h("span",{class:dias<=7?"cd urg":"cd",text:faltam(p.data)}),(kmAte(p)!=null?"  ·  ≈ "+Math.round(kmAte(p))+" km de casa":"")+(p.nota&&!tr?"  ·  "+p.nota:"")),
-      p.distancias?h("div",{class:"dist"},...String(p.distancias).split(",").map(s=>s.trim()).filter(Boolean).map(s=>h("span",{text:s}))):null,
-      people.childNodes.length?people:null,seg,links,
+      p.distancias?(()=>{const t=String(p.distancias).split(",").map(s=>s.trim()).filter(Boolean),M=t.length>3?2:3;return h("div",{class:"dist"},...t.slice(0,M).map(s=>h("span",{text:s})),t.length>M?h("span",{class:"mais",title:t.slice(M).join(", "),text:"+"+(t.length-M)}):null)})():null,
+      people.childNodes.length?people:null,h("div",{class:"accao"},seg,links),
       n?h("div",{class:"owner",text:n+(n===1?" clique":" cliques")+" do grupo no link de inscrição"}):null))}
 function detalhe(pid){const box=$("view-prova");box.replaceChildren();
   const voltar=h("button",{class:"back",onclick:fechar,text:"← Provas"});
@@ -764,13 +766,13 @@ function desenharSec(sid){if(sid==="estatisticas"){secDesenhada=null;$("pg-sec")
 function abrirMenu(abrir){$("menu").hidden=!abrir;$("scrim").hidden=!abrir;$("menuBtn").setAttribute("aria-expanded",String(abrir));document.body.style.overflow=abrir?"hidden":"";if(abrir)$("menuList").querySelector("[aria-current]")?.focus()}
 function desenharMenu(){const cur=secAtual()||"provas";
   $("menuList").replaceChildren(
-    h("li",null,h("a",{href:"#",onclick:e=>{e.preventDefault();history.pushState(null,"",location.pathname+location.search);abrirMenu(false);draw();window.scrollTo({top:0})},"aria-current":cur==="provas"?"page":null},h("span",{class:"ic",text:"◆"}),"Provas")),
-    ...(ONLINE?[h("li",{class:"sep"}),h("li",null,h("a",{href:"#s=estatisticas",onclick:()=>abrirMenu(false),"aria-current":cur==="estatisticas"?"page":null},h("span",{class:"ic",text:"▥"}),"Estatísticas")),h("li",null,h("a",{href:"#s=membros",onclick:()=>abrirMenu(false),"aria-current":(cur==="membros"||cur==="membro")?"page":null},h("span",{class:"ic",text:"☺"}),"Membros")),h("li",{class:"lbl",text:"Grupos"}),
+    h("li",null,h("a",{href:"#",onclick:e=>{e.preventDefault();history.pushState(null,"",location.pathname+location.search);abrirMenu(false);draw();window.scrollTo({top:0})},"aria-current":cur==="provas"?"page":null},ic("provas"),"Provas")),
+    ...(ONLINE?[h("li",{class:"sep"}),h("li",null,h("a",{href:"#s=estatisticas",onclick:()=>abrirMenu(false),"aria-current":cur==="estatisticas"?"page":null},ic("estatisticas"),"Estatísticas")),h("li",null,h("a",{href:"#s=membros",onclick:()=>abrirMenu(false),"aria-current":(cur==="membros"||cur==="membro")?"page":null},ic("membros"),"Membros")),h("li",{class:"lbl",text:"Grupos"}),
       ...gruposConhecidos().map(g=>h("li",null,h("a",{href:"#",onclick:e=>{e.preventDefault();abrirMenu(false);history.pushState(null,"",location.pathname);if(g.c!==grupo)mudarGrupo(g.c);else draw()},"aria-current":g.c===grupo?"true":null},h("span",{class:"ic",text:g.c===grupo?"●":"○"}),g.n||"Grupo sem nome"))),
-      h("li",null,h("a",{href:"#",onclick:e=>{e.preventDefault();abrirMenu(false);history.pushState(null,"",location.pathname);entrarAberto=true;draw();window.scrollTo({top:0});$("criarNome").focus()}},h("span",{class:"ic",text:"+"}),"Criar ou entrar noutro grupo"))]:[]),
+      h("li",null,h("a",{href:"#",onclick:e=>{e.preventDefault();abrirMenu(false);history.pushState(null,"",location.pathname);entrarAberto=true;draw();window.scrollTo({top:0});$("criarNome").focus()}},ic("mais"),"Criar ou entrar noutro grupo"))]:[]),
     h("li",{class:"sep"}),
-    ...SECOES.map(x=>h("li",null,h("a",{href:"#s="+x.id,onclick:()=>abrirMenu(false),"aria-current":cur===x.id?"page":null},h("span",{class:"ic",text:x.icone}),x.titulo))),
-    h("li",{class:"sep"}),h("li",null,h("a",{href:"#s=privacidade",onclick:()=>abrirMenu(false),"aria-current":cur==="privacidade"?"page":null},h("span",{class:"ic",text:"⚿"}),"Privacidade e dados")))}
+    ...SECOES.map(x=>h("li",null,h("a",{href:"#s="+x.id,onclick:()=>abrirMenu(false),"aria-current":cur===x.id?"page":null},ic(x.id,x.icone),x.titulo))),
+    h("li",{class:"sep"}),h("li",null,h("a",{href:"#s=privacidade",onclick:()=>abrirMenu(false),"aria-current":cur==="privacidade"?"page":null},ic("privacidade"),"Privacidade e dados")))}
 $("menuBtn").addEventListener("click",()=>abrirMenu(true));
 $("menuX").addEventListener("click",()=>abrirMenu(false));
 $("scrim").addEventListener("click",()=>abrirMenu(false));
