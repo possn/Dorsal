@@ -492,3 +492,24 @@ details.fontes.mini{margin-top:12px;padding-top:6px;font-size:.8rem}
 .horas .hr{background:var(--surface);color:var(--fg);border-top:4px solid var(--line)}
 .hb-frio{border-top-color:#5b8fc7 !important}.hb-verde{border-top-color:#3c8a55 !important}.hb-amarela{border-top-color:#e2b300 !important}
 .hb-vermelha{border-top-color:#d2412f !important}.hb-preta{border-top-color:#111 !important}
+/* histórias do ano */
+.historia{position:fixed;inset:0;z-index:100;background:#000;display:flex;align-items:center;justify-content:center}
+.historia canvas{max-width:100vw;max-height:100dvh;height:100dvh;width:auto;aspect-ratio:9/16;object-fit:contain}
+.hbarras{position:absolute;top:calc(env(safe-area-inset-top,0px) + 10px);left:10px;right:10px;display:flex;gap:4px;z-index:3}
+.hbarras span{flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.3);overflow:hidden}
+.hbarras span i{display:block;height:100%;width:0;background:#fff}
+.hbarras span.feita i{width:100%}
+.hbarras span.atual i{animation:hb 6s linear forwards}
+@keyframes hb{to{width:100%}}
+@media (prefers-reduced-motion:reduce){.hbarras span.atual i{animation:none;width:100%}}
+.hx{position:absolute;top:calc(env(safe-area-inset-top,0px) + 24px);right:12px;z-index:4;background:rgba(0,0,0,.35);color:#fff;border:0;border-radius:50%;width:40px;height:40px;font-size:1.1rem}
+.hzona{position:absolute;top:70px;bottom:110px;z-index:2}.hzona.esq{left:0;width:35%}.hzona.dir{right:0;width:65%}
+.hacoes{position:absolute;bottom:calc(env(safe-area-inset-bottom,0px) + 18px);left:0;right:0;display:flex;gap:10px;justify-content:center;z-index:4}
+.hacoes .btn{background:rgba(255,255,255,.92);color:#17211b;border:0}
+.hacoes .btn.primary{background:var(--accent);color:#fff}
+.anobtn{margin:6px 0 12px}
+.anobanner{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;text-align:left;border:0;border-radius:12px;padding:14px 16px;margin-bottom:12px;
+  background:linear-gradient(120deg,#ee5a0f,#b83d05 60%,#17211b);color:#fff;cursor:pointer}
+.anobanner .k{font-size:.72rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.85}
+.anobanner .t{font-family:var(--display);font-size:1.6rem;font-weight:800;text-transform:uppercase}
+.anobanner .s{font-size:.9rem;opacity:.9}
