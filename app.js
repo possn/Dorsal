@@ -267,8 +267,43 @@ function estatisticas(){const box=h("article",{class:"sec est"});const anoAtual=
     box.append(h("h2",{text:"Conquistas"}),h("p",{class:"hint",text:"Contam todas as provas registadas, de todos os anos."}),h("ul",{class:"conquistas"},...CONQ.map(([n,d,f])=>{const ok=f(tTudo);return h("li",{class:ok?"ok":null},h("span",{class:"med","aria-hidden":"true",text:ok?"★":"☆"}),h("span",null,h("strong",{text:n}),h("small",{text:d})))})))}
   else{const ord=T.filter(([,t])=>t.n).sort((a,b)=>b[1].km-a[1].km||b[1].n-a[1].n);
     box.append(h("h2",{text:"Quadro de "+estAno}),h("table",{class:"pt quadrog"},h("thead",null,h("tr",null,...["","Provas","Km","D+","Tempo"].map(x=>h("th",{text:x})))),
-      h("tbody",null,...ord.map(([id,t])=>h("tr",{class:id===me?"eu":null},h("td",null,h("strong",{text:nomeDe(id)})),h("td",{text:String(t.n)}),h("td",{text:fmtN(Math.round(t.km*10)/10)}),h("td",{text:String(Math.round(t.d))}),h("td",{text:t.sg?fmtH(t.sg):"—"}))))))}
+      h("tbody",null,...ord.map(([id,t])=>h("tr",{class:id===me?"eu":null},h("td",null,h("a",{class:"nomel",href:linkMembro(id)},h("strong",{text:nomeDe(id)}))),h("td",{text:String(t.n)}),h("td",{text:fmtN(Math.round(t.km*10)/10)}),h("td",{text:String(Math.round(t.d))}),h("td",{text:t.sg?fmtH(t.sg):"—"}))))))}
   box.append(h("p",{class:"hint",text:"Os números vêm dos km, D+ e tempos registados em cada prova feita (à mão ou por GPX)."}));
+  return box}
+
+// ---------- membros ----------
+const linkMembro=id=>"#s=membro&m="+id;
+const fmtKm=n=>fmtN(Math.round(n*10)/10);
+function membrosView(){const box=h("article",{class:"sec est"});box.append(h("h1",{text:"Membros"}));
+  if(!grupo){box.append(h("p",{class:"lead",text:"Entra num grupo para veres os membros."}));return box}
+  const ano=String(new Date().getFullYear());
+  const ids=Object.keys(membros).sort((a,b)=>(a===me?-1:b===me?1:0)||estatTotais(b,ano).km-estatTotais(a,ano).km||nomeDe(a).localeCompare(nomeDe(b),"pt"));
+  box.append(h("p",{class:"lead",text:(grupoNome||"O grupo")+" · "+ids.length+(ids.length===1?" membro":" membros")}),
+    h("ul",{class:"membros"},...ids.map(id=>{const t=estatTotais(id,ano),prox=futuras().filter(p=>foiA(p.id,id)).length;
+      return h("li",null,h("a",{href:linkMembro(id)},h("span",{class:"av","aria-hidden":"true",text:(nomeDe(id).trim()[0]||"?").toUpperCase()}),
+        h("span",{class:"mi"},h("strong",{text:nomeDe(id)+(id===me?" (tu)":"")}),h("small",{text:[t.n?t.n+(t.n===1?" prova":" provas")+" em "+ano:"Sem provas registadas em "+ano,t.km?fmtKm(t.km)+" km":"",prox?prox+(prox===1?" próxima":" próximas"):""].filter(Boolean).join(" · ")})),
+        h("span",{class:"seta","aria-hidden":"true",text:"›"})))})));
+  return box}
+function perfil(id){const box=h("article",{class:"sec est perfil"});
+  if(!grupo||!membros[id]){box.append(h("h1",{text:"Membro"}),h("p",{class:"lead",text:"Este membro não está no grupo actual."}),h("a",{class:"btn small",href:"#s=membros",text:"Ver membros"}));return box}
+  const ano=String(new Date().getFullYear()),t=estatTotais(id,ano),tudo=estatTotais(id,null),nome=nomeDe(id);
+  const stat=(n,l)=>h("div",{class:"st"},h("b",{text:n}),h("span",{text:l}));
+  box.append(h("a",{class:"voltar",href:"#s=membros",text:"‹ Membros"}),
+    h("div",{class:"phead"},h("span",{class:"av grande","aria-hidden":"true",text:(nome.trim()[0]||"?").toUpperCase()}),h("div",null,h("h1",{text:nome}),h("p",{class:"hint",text:id===me?"És tu":(grupoNome||"")}))),
+    h("div",{class:"meuano"},h("span",{class:"k",text:ano}),h("div",{class:"sts"},stat(String(t.n),t.n===1?"prova":"provas"),stat(fmtKm(t.km),"km"),stat(t.d>=1000?fmtN(Math.round(t.d/100)/10)+"k":String(Math.round(t.d)),"m D+"),t.sg?stat(fmtH(t.sg),"em prova"):null)),
+    ...(tudo.n>t.n?[h("p",{class:"hint",text:"Desde sempre: "+tudo.n+" provas · "+fmtKm(tudo.km)+" km · "+Math.round(tudo.d)+" m D+"})]:[]));
+  const linhaProva=(p,extra)=>h("li",null,h("button",{class:"linkbtn",type:"button",onclick:()=>abrir(p.id),text:p.nome}),h("small",{text:[dataLonga(p.data),...extra].filter(Boolean).join(" · ")}));
+  const prox=futuras().filter(p=>pres[p.id]&&pres[p.id][id]).sort((a,b)=>a.data.localeCompare(b.data));
+  box.append(h("h2",{text:"Próximas provas"}),prox.length?h("ul",{class:"plist"},...prox.map(p=>{const x=exDe(p.id,id),e=pres[p.id][id];
+    return linhaProva(p,[(ESTADOS.find(k=>k[0]===e)||[,""])[1],x.percurso,x.boleia==="oferece"?"oferece boleia":x.boleia==="precisa"?"precisa de boleia":""])})):h("p",{class:"hint",text:"Nenhuma marcada."}));
+  if(id!==me&&me){const comum=futuras().filter(p=>foiA(p.id,id)&&foiA(p.id,me)).length,feitasJuntos=passadas.filter(p=>foiA(p.id,id)&&foiA(p.id,me)).length;
+    if(comum||feitasJuntos)box.append(h("p",{class:"nota",text:"Contigo: "+[feitasJuntos?feitasJuntos+(feitasJuntos===1?" prova feita":" provas feitas"):"",comum?comum+(comum===1?" próxima":" próximas"):""].filter(Boolean).join(" · ")}))}
+  const feitas=feitasDe(id,null).sort((a,b)=>b.data.localeCompare(a.data));
+  box.append(h("h2",{text:"Provas feitas"}),feitas.length?h("ul",{class:"plist"},...feitas.map(p=>{const x=exDe(p.id,id),sg=segDeTempo(x.tempo);
+    return linhaProva(p,[x.percurso,x.km?fmtKm(+x.km)+" km":"",x.dplus?x.dplus+" m D+":"",x.tempo||"",(sg&&+x.km>=1)?ritmo(sg/ +x.km,1):"",temTrilho.has(p.id+"|"+id)?"📍 GPX":""])})):h("p",{class:"hint",text:id===me?"Regista as provas que fizeste no separador do grupo, em Provas feitas.":"Ainda não registou provas feitas."}));
+  if(t.n){const M=["J","F","M","A","M","J","J","A","S","O","N","D"];box.append(h("h2",{text:"Km por mês em "+ano}),barrasSVG(t.meses,M,"km","#ee5a0f"))}
+  const ganhas=CONQ.filter(([, ,f])=>f(tudo));
+  box.append(h("h2",{text:"Conquistas ("+ganhas.length+"/"+CONQ.length+")"}),h("ul",{class:"conquistas"},...CONQ.map(([n,d,f])=>{const ok=f(tudo);return h("li",{class:ok?"ok":null},h("span",{class:"med","aria-hidden":"true",text:ok?"★":"☆"}),h("span",null,h("strong",{text:n}),h("small",{text:d})))})));
   return box}
 
 // ---------- plano de treino ----------
@@ -408,7 +443,8 @@ function previsao(p){const dias=Math.round((parseD(p.data)-hoje())/864e5);const 
 async function setEstado(pid,e){if(!podeMarcar())return;const m=pres[pid]=pres[pid]||{};const antes=m[me];
   if(antes===e)delete m[me];else m[me]=e;draw();
   try{if(antes===e)await api("presencas?membro_id=eq."+me+"&prova_id=eq."+encodeURIComponent(pid),{method:"DELETE"});
-    else await api("presencas?on_conflict=membro_id,prova_id",{method:"POST",prefer:"resolution=merge-duplicates,return=minimal",body:{grupo,membro_id:me,prova_id:pid,estado:e,atualizado:new Date().toISOString()}});}
+    else await api("presencas?on_conflict=membro_id,prova_id",{method:"POST",prefer:"resolution=merge-duplicates,return=minimal",body:{grupo,membro_id:me,prova_id:pid,estado:e,atualizado:new Date().toISOString()}});
+    if(antes!==e&&(e==="inscrito"||e==="vou"))fetch(FN,{method:"POST",headers:fnHeaders(),body:JSON.stringify({tipo:"presenca",prova_id:pid,membro_id:me}),keepalive:true}).catch(()=>{});}
   catch(err){if(antes)m[me]=antes;else delete m[me];draw();toast("Não foi possível guardar. Tenta outra vez.")}}
 function cliqueInsc(pid){if(!ONLINE||!grupo)return;cliques[pid]=(cliques[pid]||0)+1;api("cliques",{method:"POST",prefer:"return=minimal",body:{grupo,prova_id:pid,membro_id:me}}).catch(()=>{})}
 async function remover(pid){if(confirmDel!==pid){confirmDel=pid;draw();return}confirmDel=null;
@@ -442,7 +478,7 @@ function detalhe(pid){const box=$("view-prova");box.replaceChildren();
   const p=provas.find(x=>x.id===pid)||passadas.find(x=>x.id===pid);
   if(!p){box.append(voltar,h("div",{class:"empty",text:loaded?"Esta prova já não está no calendário.":"A carregar…"}));return}
   const d=parseD(p.data),q=quem(p.id),insc=valid(p.inscricao),info=valid(p.info);
-  const pessoa=(id,k)=>{const x=exDe(p.id,id);return h("li",{class:"pessoa "+k},h("span",{class:"nome",text:nomeDe(id)+(id===me?" (tu)":"")}),
+  const pessoa=(id,k)=>{const x=exDe(p.id,id);return h("li",{class:"pessoa "+k},h("a",{class:"nome",href:linkMembro(id),text:nomeDe(id)+(id===me?" (tu)":"")}),
     h("span",{class:"ptag"},x.percurso?h("span",{text:x.percurso}):null,x.boleia==="oferece"?h("span",{class:"car",text:"🚗 "+(x.lugares?x.lugares+(x.lugares===1?" lugar":" lugares"):"leva carro")}):x.boleia==="precisa"?h("span",{class:"car precisa",text:"precisa de boleia"}):null))};
   const bloco=(k,titulo,ids,vazio)=>h("section",{class:"grupo-bloco "+k},h("h3",null,titulo+" ",h("span",{class:"n",text:String(ids.length)})),
     ids.length?h("ul",{class:"pessoas"},...ids.map(id=>pessoa(id,k))):h("p",{class:"hint",text:vazio}));
@@ -549,7 +585,7 @@ function draw(){
 
 // ---------- secções (menu lateral) ----------
 const SECOES=window.DORSAL_SECOES||[];
-function secAtual(){const m=location.hash.match(/[#&]s=([a-z-]+)/);return m&&(m[1]==="estatisticas"||SECOES.some(x=>x.id===m[1]))?m[1]:null}
+function secAtual(){const m=location.hash.match(/[#&]s=([a-z-]+)/);return m&&(m[1]==="estatisticas"||m[1]==="membros"||m[1]==="membro"||SECOES.some(x=>x.id===m[1]))?m[1]:null}
 let secDesenhada=null;
 function comRefs(texto,sid){const out=[];let i=0;String(texto).replace(/\[(\d+)\]/g,(m,n,pos)=>{out.push(texto.slice(i,pos));
   out.push(h("sup",null,h("a",{href:"#",onclick:e=>{e.preventDefault();const f=document.getElementById("f-"+sid+"-"+n);if(f)f.scrollIntoView({behavior:"smooth",block:"center"})},"aria-label":"Fonte "+n,text:"["+n+"]"})));i=pos+m.length;return m});
@@ -595,14 +631,16 @@ function bloco(b,sid){switch(b.t){
   case "calc-esforco":return calcEsforco(sid);
   case "calc-abast":return calcAbast(sid);
   default:return null}}
-function desenharSec(sid){if(sid==="estatisticas"){secDesenhada=null;$("pg-sec").replaceChildren(estatisticas());return}if(secDesenhada===sid)return;secDesenhada=sid;const S=SECOES.find(x=>x.id===sid);const box=$("pg-sec");
+function desenharSec(sid){if(sid==="estatisticas"){secDesenhada=null;$("pg-sec").replaceChildren(estatisticas());return}
+  if(sid==="membros"){secDesenhada=null;$("pg-sec").replaceChildren(membrosView());return}
+  if(sid==="membro"){secDesenhada=null;const m=location.hash.match(/[#&]m=([0-9a-z-]{1,40})/i);$("pg-sec").replaceChildren(perfil(m?m[1]:me));return}if(secDesenhada===sid)return;secDesenhada=sid;const S=SECOES.find(x=>x.id===sid);const box=$("pg-sec");
   box.replaceChildren(h("article",{class:"sec"},h("h1",{text:S.titulo}),h("p",{class:"lead",text:S.resumo}),...S.blocos.map(b=>bloco(b,sid)),
     S.fontes.length?h("section",{class:"fontes"},h("strong",{text:"Fontes"}),h("ol",null,...S.fontes.map((f,i)=>h("li",{id:"f-"+sid+"-"+(i+1)},f.t+" ",h("a",{href:f.u,target:"_blank",rel:"noopener",text:"Abrir ↗"}))))):null))}
 function abrirMenu(abrir){$("menu").hidden=!abrir;$("scrim").hidden=!abrir;$("menuBtn").setAttribute("aria-expanded",String(abrir));document.body.style.overflow=abrir?"hidden":"";if(abrir)$("menuList").querySelector("[aria-current]")?.focus()}
 function desenharMenu(){const cur=secAtual()||"provas";
   $("menuList").replaceChildren(
     h("li",null,h("a",{href:"#",onclick:e=>{e.preventDefault();history.pushState(null,"",location.pathname+location.search);abrirMenu(false);draw();window.scrollTo({top:0})},"aria-current":cur==="provas"?"page":null},h("span",{class:"ic",text:"◆"}),"Provas")),
-    ...(ONLINE?[h("li",{class:"sep"}),h("li",null,h("a",{href:"#s=estatisticas",onclick:()=>abrirMenu(false),"aria-current":cur==="estatisticas"?"page":null},h("span",{class:"ic",text:"▥"}),"Estatísticas")),h("li",{class:"lbl",text:"Grupos"}),
+    ...(ONLINE?[h("li",{class:"sep"}),h("li",null,h("a",{href:"#s=estatisticas",onclick:()=>abrirMenu(false),"aria-current":cur==="estatisticas"?"page":null},h("span",{class:"ic",text:"▥"}),"Estatísticas")),h("li",null,h("a",{href:"#s=membros",onclick:()=>abrirMenu(false),"aria-current":(cur==="membros"||cur==="membro")?"page":null},h("span",{class:"ic",text:"☺"}),"Membros")),h("li",{class:"lbl",text:"Grupos"}),
       ...gruposConhecidos().map(g=>h("li",null,h("a",{href:"#",onclick:e=>{e.preventDefault();abrirMenu(false);history.pushState(null,"",location.pathname);if(g.c!==grupo)mudarGrupo(g.c);else draw()},"aria-current":g.c===grupo?"true":null},h("span",{class:"ic",text:g.c===grupo?"●":"○"}),g.n||"Grupo sem nome"))),
       h("li",null,h("a",{href:"#",onclick:e=>{e.preventDefault();abrirMenu(false);history.pushState(null,"",location.pathname);entrarAberto=true;draw();window.scrollTo({top:0});$("criarNome").focus()}},h("span",{class:"ic",text:"+"}),"Criar ou entrar noutro grupo"))]:[]),
     h("li",{class:"sep"}),

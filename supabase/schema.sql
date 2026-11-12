@@ -207,3 +207,22 @@ create policy trilhos_alterar on public.trilhos for update using (grupo = public
 drop policy if exists trilhos_apagar on public.trilhos;
 create policy trilhos_apagar on public.trilhos for delete using (grupo = public.grupo_atual());
 grant select, insert, update, delete on public.trilhos to anon;
+
+-- ---------- avisos (v2 da função notificar) ----------
+-- Registo de avisos já enviados, para não repetir (só a função, com a chave de serviço, lhe acede).
+create table if not exists public.notif_log (
+  chave text primary key,
+  criado_em timestamptz not null default now()
+);
+alter table public.notif_log enable row level security;
+revoke all on public.notif_log from anon, authenticated;
+
+create extension if not exists pg_net with schema extensions;
+create extension if not exists pg_cron;
+
+-- Lembrete na véspera da prova, todos os dias às 18:00 UTC (18h no inverno, 19h no verão em Lisboa).
+-- Substitui <ANON_KEY> pela chave anónima de config.js.
+-- select cron.schedule('dorsal-lembretes','0 18 * * *', $$select net.http_post(
+--   url:='https://gubjzbirpkwrxoreqvfm.supabase.co/functions/v1/notificar',
+--   headers:=jsonb_build_object('Content-Type','application/json','Authorization','Bearer <ANON_KEY>'),
+--   body:='{"tipo":"lembretes"}'::jsonb)$$);

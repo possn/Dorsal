@@ -337,3 +337,22 @@ table.pt tr.prova td{background:var(--orange-soft);font-weight:600}
 .conquistas small{color:var(--muted);font-size:.78rem}
 .quadrog tr.eu td{background:var(--orange-soft)}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:6px;font-weight:600;z-index:10}
+/* membros */
+.pessoa a.nome,.nomel{color:var(--fg);text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
+.pessoa a.nome:hover,.nomel:hover{text-decoration-color:var(--accent)}
+.membros{list-style:none;margin:8px 0;padding:0}
+.membros li{border-top:1px solid var(--line)}
+.membros a{display:flex;align-items:center;gap:12px;padding:10px 2px;color:var(--fg);text-decoration:none}
+.membros .mi{flex:1;display:flex;flex-direction:column;min-width:0}
+.membros small{color:var(--muted,#6b6b6b)}
+.membros .seta{font-size:1.4rem;color:var(--muted,#888)}
+.av{flex:none;display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font-weight:800}
+.av.grande{width:58px;height:58px;font-size:1.6rem}
+.phead{display:flex;align-items:center;gap:14px;margin:6px 0 10px}
+.phead h1{margin:0}
+.phead .hint{margin:2px 0 0}
+.voltar{display:inline-block;margin-bottom:4px;color:var(--fg);text-decoration:none;font-weight:600}
+.plist{list-style:none;margin:6px 0;padding:0}
+.plist li{display:flex;flex-direction:column;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line)}
+.plist li:first-child{border-top:0}
+.plist small{color:var(--muted,#6b6b6b)}
