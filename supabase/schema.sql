@@ -180,3 +180,30 @@ revoke update on public.comentarios from anon;
 
 alter table public.presencas add column if not exists km numeric(5,1) check (km is null or (km >= 0 and km <= 400));
 alter table public.presencas add column if not exists dplus integer check (dplus is null or (dplus >= 0 and dplus <= 20000));
+
+-- Trilhos GPS importados de GPX
+create table if not exists public.trilhos (
+  grupo text not null references public.grupos(codigo) on delete cascade,
+  prova_id text not null,
+  membro_id uuid not null references public.membros(id) on delete cascade,
+  km numeric(6,2) not null check (km >= 0 and km <= 400),
+  dplus integer not null check (dplus >= 0 and dplus <= 20000),
+  dminus integer not null default 0 check (dminus >= 0 and dminus <= 20000),
+  duracao_s integer check (duracao_s is null or (duracao_s >= 0 and duracao_s <= 604800)),
+  inicio timestamptz,
+  pontos text not null check (char_length(pontos) <= 120000),
+  elev text not null default '' check (char_length(elev) <= 60000),
+  atualizado timestamptz not null default now(),
+  primary key (membro_id, prova_id)
+);
+create index if not exists trilhos_grupo_prova on public.trilhos(grupo, prova_id);
+alter table public.trilhos enable row level security;
+drop policy if exists trilhos_ler on public.trilhos;
+create policy trilhos_ler on public.trilhos for select using (grupo = public.grupo_atual());
+drop policy if exists trilhos_criar on public.trilhos;
+create policy trilhos_criar on public.trilhos for insert with check (grupo = public.grupo_atual() and exists (select 1 from public.membros m where m.id = membro_id and m.grupo = public.grupo_atual()));
+drop policy if exists trilhos_alterar on public.trilhos;
+create policy trilhos_alterar on public.trilhos for update using (grupo = public.grupo_atual()) with check (grupo = public.grupo_atual() and exists (select 1 from public.membros m where m.id = membro_id and m.grupo = public.grupo_atual()));
+drop policy if exists trilhos_apagar on public.trilhos;
+create policy trilhos_apagar on public.trilhos for delete using (grupo = public.grupo_atual());
+grant select, insert, update, delete on public.trilhos to anon;

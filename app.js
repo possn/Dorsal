@@ -13,7 +13,7 @@ const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},se
 
 // ---------- estado ----------
 let grupo=null,grupoNome="",grupoLogo="",me=null;
-let extra={},meteo={},passadas=[],nCom={},conv={},maxCom={},novas={};
+let extra={},meteo={},passadas=[],nCom={},conv={},maxCom={},novas={},temTrilho=new Set(),trilhosP={},mapas={};
 const lidas=()=>{try{return JSON.parse(store.get("dorsal.lidas."+grupo)||"null")}catch(_){return null}},guardarLidas=L=>store.set("dorsal.lidas."+grupo,JSON.stringify(L));
 function marcarLida(pid,id){if(!id)return;const L=lidas()||{};if((L[pid]||0)<id){L[pid]=id;guardarLidas(L)}if(novas[pid]){delete novas[pid]}}
 let provas=[],membros={},pres={},cliques={},loaded=false;
@@ -58,8 +58,8 @@ async function carregar(){
   try{
     const hoje=hojeISO();
     const reqs=[api("provas?select=*&data=gte."+hoje+"&order=data.asc,nome.asc")];
-    if(grupo)reqs.push(api("grupos?select=nome,logo&codigo=eq."+grupo),api("membros?select=id,nome&order=nome.asc"),api("presencas?select=membro_id,prova_id,estado,percurso,boleia,lugares,tempo,km,dplus"),api("cliques?select=prova_id"),api("comentarios?select=prova_id,id,membro_id").catch(()=>[]));
-    const [ps,gs,ms,pr,cl,co]=await Promise.all(reqs);
+    if(grupo)reqs.push(api("grupos?select=nome,logo&codigo=eq."+grupo),api("membros?select=id,nome&order=nome.asc"),api("presencas?select=membro_id,prova_id,estado,percurso,boleia,lugares,tempo,km,dplus"),api("cliques?select=prova_id"),api("comentarios?select=prova_id,id,membro_id").catch(()=>[]),api("trilhos?select=prova_id,membro_id").catch(()=>[]));
+    const [ps,gs,ms,pr,cl,co,tr]=await Promise.all(reqs);if(tr){temTrilho=new Set(tr.map(x=>x.prova_id+"|"+x.membro_id))}
     provas=ps||[];
     if(grupo){
       if(!gs||!gs.length){status("Esse código de grupo não existe. Confirma o link que recebeste.");esquecerGrupo(grupo);store.set("dorsal.grupo",null);grupo=null;membros={};pres={};}
@@ -174,6 +174,46 @@ function pushCartao(){if(!me||!ONLINE||pushAtivo()||store.get("dorsal.pushdispen
   else{corpo="Recebe um aviso no telemóvel quando alguém do grupo escreve na conversa de uma prova.";acao=h("button",{class:"btn primary small",type:"button",disabled:pushOcupado?true:null,onclick:activarPush,text:pushOcupado?"A activar…":"Activar notificações"})}
   return h("div",{class:"pushcard"},h("strong",{text:"🔔 Avisos das conversas"}),h("p",{text:corpo}),h("div",{class:"row"},acao,fechar))}
 
+// ---------- trilhos GPS (GPX) ----------
+const CORES=["#ee5a0f","#2563eb","#2e6b43","#9333ea","#d97706","#0891b2","#be123c","#4d7c0f"];
+const hms=s=>Math.floor(s/3600)+":"+String(Math.floor(s%3600/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0");
+function ritmo(dur,km){if(!dur||!km)return"";const s=dur/km;return Math.floor(s/60)+":"+String(Math.round(s%60)).padStart(2,"0")+" /km"}
+async function guardarTrilho(pid,g){
+  if(!(pres[pid]&&pres[pid][me]))await api("presencas?on_conflict=membro_id,prova_id",{method:"POST",prefer:"resolution=merge-duplicates,return=minimal",body:{grupo,membro_id:me,prova_id:pid,estado:"inscrito",atualizado:new Date().toISOString()}});
+  await api("trilhos?on_conflict=membro_id,prova_id",{method:"POST",prefer:"resolution=merge-duplicates,return=minimal",body:{grupo,prova_id:pid,membro_id:me,km:g.km,dplus:g.dplus,dminus:g.dminus,duracao_s:g.duracao_s,inicio:g.inicio?g.inicio.toISOString():null,pontos:g.pontos,elev:g.elev,atualizado:new Date().toISOString()}});
+  const campos={km:Math.round(g.km*10)/10,dplus:g.dplus};if(g.duracao_s)campos.tempo=hms(g.duracao_s);
+  await api("presencas?membro_id=eq."+me+"&prova_id=eq."+encodeURIComponent(pid),{method:"PATCH",prefer:"return=minimal",body:campos});
+  temTrilho.add(pid+"|"+me);delete trilhosP[pid];if(mapas[pid]){try{mapas[pid].map.remove()}catch(_){}delete mapas[pid]}}
+async function importarGPX(pid,file){try{const g=DorsalGPX.ler(await file.text());
+    if(!confirm("GPX lido: "+String(g.km).replace(".",",")+" km, "+g.dplus+" m D+"+(g.duracao_s?", "+hms(g.duracao_s):"")+". Guardar nesta prova?"))return;
+    await guardarTrilho(pid,g);toast("Trilho guardado");await carregar()}catch(err){toast(err&&err.message&&!err.status?err.message:"Não foi possível guardar o trilho.")}}
+function carregarTrilhos(pid){trilhosP[pid]={estado:"a",lista:[]};api("trilhos?select=membro_id,km,dplus,dminus,duracao_s,pontos,elev&prova_id=eq."+encodeURIComponent(pid))
+  .then(l=>{trilhosP[pid]={estado:"ok",lista:(l||[]).sort((a,b)=>nomeDe(a.membro_id).localeCompare(nomeDe(b.membro_id),"pt"))};draw()}).catch(()=>{trilhosP[pid]={estado:"erro",lista:[]};draw()})}
+let leafletP=null;
+function carregarLeaflet(){if(window.L)return Promise.resolve();if(leafletP)return leafletP;leafletP=new Promise((res,rej)=>{const c=document.createElement("link");c.rel="stylesheet";c.href="vendor/leaflet/leaflet.css";document.head.append(c);
+  const s=document.createElement("script");s.src="vendor/leaflet/leaflet.js";s.onload=res;s.onerror=()=>{leafletP=null;rej()};document.head.append(s)});return leafletP}
+function mapaTrilhos(pid,lista){let m=mapas[pid];const chave=lista.map(t=>t.membro_id+t.pontos.length).join("|");
+  if(m&&m.chave===chave){requestAnimationFrame(()=>m.map&&m.map.invalidateSize());return m.el}
+  if(m&&m.map){try{m.map.remove()}catch(_){}}
+  const el=h("div",{class:"mapa","aria-label":"Mapa dos trilhos"});m=mapas[pid]={el,chave,map:null};
+  carregarLeaflet().then(()=>{if(mapas[pid]!==m)return;const map=L.map(el,{scrollWheelZoom:false,attributionControl:true});m.map=map;
+    L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",{maxZoom:17,subdomains:"abc",attribution:'Mapa © <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA) · dados © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map);
+    const b=[];lista.forEach((t,i)=>{const c=DorsalGPX.descodificar(t.pontos);if(c.length<2)return;L.polyline(c,{color:CORES[i%CORES.length],weight:4,opacity:.9}).bindTooltip(nomeDe(t.membro_id)).addTo(map);b.push(...c);
+      if(i===0){L.circleMarker(c[0],{radius:6,color:"#fff",weight:2,fillColor:"#2e6b43",fillOpacity:1}).bindTooltip("Partida").addTo(map);L.circleMarker(c[c.length-1],{radius:6,color:"#fff",weight:2,fillColor:"#be123c",fillOpacity:1}).bindTooltip("Chegada").addTo(map)}});
+    if(b.length)map.fitBounds(b,{padding:[16,16]});setTimeout(()=>map.invalidateSize(),60)}).catch(()=>{el.textContent="Não foi possível carregar o mapa."});
+  return el}
+function trilhosView(p){if(!grupo||!ONLINE||parseD(p.data)>hoje())return null;if(!trilhosP[p.id])carregarTrilhos(p.id);const T=trilhosP[p.id]||{estado:"a",lista:[]};
+  const meuTem=T.lista.some(t=>t.membro_id===me);
+  const imp=podeMarcar()?h("span",null,h("label",{class:"btn small"+(meuTem?"":" primary"),for:"gpx-"+p.id,text:meuTem?"Substituir o meu GPX":"Importar o meu GPX"}),
+    h("input",{id:"gpx-"+p.id,type:"file",accept:".gpx,application/gpx+xml,application/xml,text/xml",class:"vh",onchange:e=>{const f=e.target.files[0];e.target.value="";if(f)importarGPX(p.id,f)}})):null;
+  const linhas=T.lista.map((t,i)=>h("li",null,h("span",{class:"cor",style:"background:"+CORES[i%CORES.length]}),h("strong",{text:nomeDe(t.membro_id)+(t.membro_id===me?" (tu)":"")}),
+    h("span",{class:"tdados",text:String(+t.km).replace(".",",")+" km · "+t.dplus+" m D+"+(t.duracao_s?" · "+hms(t.duracao_s)+" · "+ritmo(t.duracao_s,+t.km):"")}),
+    t.membro_id===me?h("button",{class:"linkbtn",type:"button",onclick:async()=>{if(!confirm("Apagar o teu trilho desta prova?"))return;try{await api("trilhos?membro_id=eq."+me+"&prova_id=eq."+encodeURIComponent(p.id),{method:"DELETE"});temTrilho.delete(p.id+"|"+me);delete trilhosP[p.id];if(mapas[p.id]){try{mapas[p.id].map.remove()}catch(_){}delete mapas[p.id]}draw()}catch(_){toast("Não foi possível apagar.")}},text:"apagar"}):null));
+  let perfil=null;if(T.lista.length){perfil=DorsalGPX.perfilSVG(T.lista.map((t,i)=>({coords:DorsalGPX.descodificar(t.pontos),elev:t.elev,cor:CORES[i%CORES.length]})))}
+  return h("section",{class:"grupo-bloco trilhos"},h("div",{class:"row between"},h("h3",null,"Trilhos GPS ",h("span",{class:"n",text:T.lista.length?String(T.lista.length):""})),imp),
+    T.estado==="a"?h("p",{class:"hint",text:"A carregar…"}):T.lista.length?h("div",null,mapaTrilhos(p.id,T.lista),perfil,h("ul",{class:"tlista"},...linhas)):
+    h("p",{class:"hint",text:"Ninguém importou ainda o trilho desta prova. Exporta o GPX do relógio, do Strava ou do Wikiloc e importa-o aqui: a app calcula km, D+, tempo e ritmo."}))}
+
 // ---------- plano de treino ----------
 const ALVO_LONGA={"Caminhada":120,"Trail curto":100,"Trail longo":180,"Skyrunning":150,"Trail ultra":300,"Backyard":300};
 function planoTreino(p,percurso,atual){const corrida=parseD(p.data),seg=new Date(hoje());seg.setDate(seg.getDate()-((seg.getDay()+6)%7));
@@ -236,7 +276,7 @@ function meuAno(){if(!me||!grupo)return null;const ano=String(new Date().getFull
     stat(String(t.n),t.n===1?"prova feita":"provas feitas"),t.km?stat(fmtN(Math.round(t.km*10)/10),"km"):null,t.d?stat(t.d>=1000?fmtN(Math.round(t.d/100)/10)+"k":String(t.d),"m D+"):null,t.sg?stat(fmtH(t.sg),"em prova"):null,stat(String(prox.length),prox.length===1?"próxima":"próximas")),
     !t.km&&t.n?h("p",{class:"hint",text:"Acrescenta os km e o D+ às tuas provas feitas, em baixo, para veres os totais."}):null)}
 
-let regAberto=false,quadroPor="provas",editHist=null,regDraft={};
+let regAberto=false,quadroPor="provas",editHist=null,regDraft={},regGPX=null;
 const PERCURSOS=["Caminhada","Trail curto","Trail longo","Trail ultra","Skyrunning","Backyard","Estrada","Outro"];
 function registoForm(){const v=id=>$(id)?$(id).value:"";
   const f=h("form",{class:"form registo",onsubmit:async e=>{e.preventDefault();const nome=$("rNome").value.trim(),data=$("rData").value;if(!nome||!data)return;
@@ -250,8 +290,14 @@ function registoForm(){const v=id=>$(id)?$(id).value:"";
       try{try{await api("provas",{method:"POST",prefer:"return=minimal",body})}catch(err){if(err.status!==409)throw err;
           const existe=passadas.find(x=>x.id===id);if(!existe){id=id.slice(0,70)+"-"+Math.random().toString(36).slice(2,6);body.id=id;await api("provas",{method:"POST",prefer:"return=minimal",body})}}
         await api("presencas?on_conflict=membro_id,prova_id",{method:"POST",prefer:"resolution=merge-duplicates,return=minimal",body:{grupo,membro_id:me,prova_id:id,estado:"inscrito",percurso:$("rPerc").value,km,dplus:dp,tempo:t||"",atualizado:new Date().toISOString()}});
-        regAberto=false;regDraft={};toast("Prova registada");await carregar()}
+        if(regGPX){try{await guardarTrilho(id,regGPX)}catch(_){toast("A prova ficou registada, mas o trilho não foi guardado.")}}
+        regAberto=false;regDraft={};regGPX=null;toast("Prova registada");await carregar()}
       catch(err){toast("Não foi possível registar. Tenta outra vez.")}finally{b.disabled=false}}},
+    h("div",{class:"full gpxpre"},h("label",{class:"btn small",for:"rGpx",text:regGPX?"GPX: "+regGPX.km.toString().replace(".",",")+" km ✓":"Preencher a partir de um GPX"}),h("input",{id:"rGpx",type:"file",accept:".gpx,application/gpx+xml,application/xml,text/xml",class:"vh",onchange:async e=>{const f=e.target.files[0];if(!f)return;
+      try{const g=DorsalGPX.ler(await f.text());regGPX=g;if(g.nome&&!$("rNome").value)regDraft.rNome=g.nome;if(g.inicio)regDraft.rData=g.inicio.getFullYear()+"-"+String(g.inicio.getMonth()+1).padStart(2,"0")+"-"+String(g.inicio.getDate()).padStart(2,"0");
+        regDraft.rKm=String(Math.round(g.km*10)/10).replace(".",",");regDraft.rD=String(g.dplus);if(g.duracao_s)regDraft.rTempo=hms(g.duracao_s);
+        {const c=DorsalGPX.descodificar(g.pontos)[0],cc=c&&concelhoMaisPerto(c[0],c[1]);if(cc){regDraft.rConc=cc[4];regDraft.rDist=cc[1]}}draw()}
+      catch(err){toast(err.message||"Não consegui ler esse GPX.")}}}),h("span",{class:"hint",text:" Lê nome, data, km, D+, tempo e local do ficheiro do relógio, Strava ou Wikiloc."})),
     h("label",{class:"full",for:"rNome"},"Nome da prova",h("input",{id:"rNome",required:true,maxlength:"120"})),
     h("label",{for:"rData"},"Data",h("input",{id:"rData",type:"date",required:true,max:hojeISO()})),
     h("label",{for:"rPerc"},"Percurso",h("select",{id:"rPerc"},...PERCURSOS.map(x=>h("option",{value:x,text:x})))),
@@ -262,8 +308,8 @@ function registoForm(){const v=id=>$(id)?$(id).value:"";
     h("label",{class:"full",for:"rTempo"},"Tempo (opcional)",h("input",{id:"rTempo",inputmode:"numeric",placeholder:"3:45:10"})),
     h("div",{class:"full row"},h("button",{class:"btn primary",type:"submit",text:"Registar"}),h("button",{class:"btn",type:"button",onclick:()=>{regAberto=false;draw()},text:"Cancelar"})));
   f.querySelector("#rPerc").value="Trail curto";
-  for(const k in regDraft){const el=f.querySelector("#"+k);if(el)el.value=regDraft[k]}
-  f.addEventListener("input",e=>{if(e.target.id)regDraft[e.target.id]=e.target.value});f.addEventListener("change",e=>{if(e.target.id)regDraft[e.target.id]=e.target.value});return f}
+  for(const k in regDraft){const el=f.querySelector("#"+k);if(el&&el.type!=="file")el.value=regDraft[k]}
+  const guarda=e=>{if(e.target.id&&e.target.type!=="file")regDraft[e.target.id]=e.target.value};f.addEventListener("input",guarda);f.addEventListener("change",guarda);return f}
 function historico(){if(!grupo||!me)return null;const ano=String(new Date().getFullYear());
   const ids=new Set();for(const p of passadas)if(p.data.startsWith(ano))for(const id of Object.keys(pres[p.id]||{}))if(foiA(p.id,id))ids.add(id);
   const quadro=[...ids].map(id=>[id,totais(id,ano)]).sort((a,b)=>quadroPor==="km"?(b[1].km-a[1].km||b[1].n-a[1].n):(b[1].n-a[1].n||b[1].km-a[1].km)||nomeDe(a[0]).localeCompare(nomeDe(b[0]),"pt"));
@@ -275,7 +321,7 @@ function historico(){if(!grupo||!me)return null;const ano=String(new Date().getF
           setExtra(p.id,{km,dplus:dp,tempo:t}).then(ok=>{if(ok){editHist=null;toast("Guardado");draw()}})}},iK,iD,iT,h("button",{class:"btn small primary",type:"submit",text:"Guardar"}))}
       else meu=h("button",{class:"linkbtn",type:"button",onclick:()=>{editHist=p.id;draw()},text:(x.km||x.tempo)?"Editar os meus dados":"Acrescentar km, D+ e tempo"})}
     return h("li",{class:"hist"},h("div",{class:"hist-top"},h("span",{class:"hd",text:d.getDate()+" "+MESES[d.getMonth()].slice(0,3)+" "+d.getFullYear()}),h("button",{class:"titlebtn",onclick:()=>abrir(p.id),text:p.nome})),
-      quem.length?h("div",{class:"people"},...quem.map(id=>{const x=exDe(p.id,id);return h("span",{class:"p inscrito",text:nomeDe(id)+(x.percurso?" · "+x.percurso:"")+(x.km?" · "+fmtN(+x.km)+" km":"")+(x.tempo?" · "+x.tempo:"")})})):null,meu)};
+      quem.length?h("div",{class:"people"},...quem.map(id=>{const x=exDe(p.id,id);return h("span",{class:"p inscrito",text:nomeDe(id)+(x.percurso?" · "+x.percurso:"")+(x.km?" · "+fmtN(+x.km)+" km":"")+(x.tempo?" · "+x.tempo:"")+(temTrilho.has(p.id+"|"+id)?" · 📍":"")})})):null,meu)};
   const lista=passadas.filter(p=>Object.keys(pres[p.id]||{}).some(id=>foiA(p.id,id)));
   return h("section",{class:"historico"},h("div",{class:"row between"},h("h2",{class:"month",text:"Provas feitas"}),regAberto?null:h("button",{class:"btn small",type:"button",onclick:()=>{regAberto=true;draw();setTimeout(()=>$("rNome")&&$("rNome").focus(),50)},text:"+ Registar prova feita"})),
     regAberto?registoForm():null,
@@ -377,6 +423,7 @@ function detalhe(pid){const box=$("view-prova");box.replaceChildren();
       return h("section",{class:"grupo-bloco boleias"},h("h3",null,"Boleias ",h("span",{class:"n",text:livres+(livres===1?" lugar livre":" lugares livres")})),
         ofer.length?h("p",null,h("strong",{text:"Oferecem: "}),ofer.map(id=>nomeDe(id)+" ("+(exDe(p.id,id).lugares||0)+")").join(", ")):null,
         prec.length?h("p",null,h("strong",{text:"Precisam: "}),prec.map(nomeDe).join(", ")):null)})(),
+    trilhosView(p),
     conversa(p),
     h("div",{class:"links"},h("button",{class:"linkbtn",onclick:()=>{openMsg=openMsg===p.id?null:p.id;draw()},text:openMsg===p.id?"Fechar mensagem":"Mensagem para o WhatsApp"})),
     msgDe(p)))}

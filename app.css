@@ -303,4 +303,19 @@ table.pt tr.prova td{background:var(--orange-soft);font-weight:600}
 .tempoform input{width:84px;flex:1 1 70px;min-width:0}
 .meuano .hint{margin:6px 0 0}
 .sts{flex-wrap:wrap;gap:12px 18px}
+.trilhos{border-left:4px solid #2563eb}
+.trilhos .row.between h3{margin:0}
+.mapa{height:260px;border-radius:8px;margin:10px 0 6px;background:var(--chip);z-index:0}
+.perfil{width:100%;height:auto;display:block;margin:4px 0}
+.perfil .grade{stroke:var(--line);stroke-width:1}
+.perfil .eixo{fill:var(--muted);font-size:20px;font-family:var(--body)}
+.perfil .linha{fill:none;stroke-width:3}
+.perfil .area{fill:var(--orange-soft);stroke:none}
+.tlista{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.tlista li{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-size:.92rem}
+.tlista .cor{width:12px;height:12px;border-radius:3px;flex:none}
+.tlista .tdados{color:var(--muted);font-variant-numeric:tabular-nums}
+.tlista .linkbtn{margin-left:auto;font-size:.8rem}
+.gpxpre{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.leaflet-container{font-family:var(--body)}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:6px;font-weight:600;z-index:10}
