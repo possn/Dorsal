@@ -352,6 +352,89 @@ function privacidade(){const box=h("article",{class:"sec privacidade"});
       h("label",null,"Para confirmar, escreve "+nomeDe(me),inp),h("button",{class:"btn danger",type:"button",onclick:apagarDados,text:"Apagar tudo o que é meu"}))));
   return box}
 
+// ---------- previsão de tempo de prova, calor e hidratação ----------
+const FONTES_PREV=[
+  ["ITRA. Km-esforço: 1 km = 1; cada 100 m de D+ = 1.","https://itra.run/About/DiscoverTrailRunning"],
+  ["Riegel PS. Athletic records and human endurance. Am Sci 1981;69(3):285-90 (fadiga com a distância, expoente 1,06).","https://www.jstor.org/stable/27850427"],
+  ["Roberts WO et al. ACSM Expert Consensus Statement on Exertional Heat Illness. Curr Sports Med Rep 2023;22(4):134-49.","https://doi.org/10.1249/JSR.0000000000001058"],
+  ["Armstrong LE et al. ACSM Position Stand: Exertional heat illness during training and competition. Med Sci Sports Exerc 2007;39(3):556-72 (bandeiras por WBGT).","https://doi.org/10.1249/MSS.0b013e31802fa199"],
+  ["Australian Bureau of Meteorology. Aproximação ao WBGT a partir de temperatura e humidade (sol moderado, vento fraco).","https://www.bom.gov.au/info/thermal_stress/#approximation"],
+  ["Tiller NB et al. ISSN Position Stand: nutritional considerations for single-stage ultra-marathon training and racing. J Int Soc Sports Nutr 2019;16:50.","https://doi.org/10.1186/s12970-019-0312-9"],
+  ["Hew-Butler T et al. Exercise-Associated Hyponatremia Consensus, Carlsbad 2015. Clin J Sport Med 2015;25(4):303-20.","https://doi.org/10.1097/JSM.0000000000000221"],
+  ["Thomas DT, Erdman KA, Burke LM. ACSM/AND/DC Joint Position Statement: Nutrition and Athletic Performance. Med Sci Sports Exerc 2016;48(3):543-68.","https://doi.org/10.1249/MSS.0000000000000852"]];
+const kmEsf=(km,d)=>(+km||0)+(+d||0)/100;
+function preverTempo(id,km,dp){const alvo=kmEsf(km,dp);if(!(alvo>0))return null;
+  let refs=passadas.filter(p=>!eTreino(p)&&foiA(p.id,id)).map(p=>{const x=exDe(p.id,id),sg=segDeTempo(x.tempo);return {p,sg,ke:kmEsf(x.km,x.dplus)}}).filter(r=>r.sg>0&&r.ke>=3);
+  if(!refs.length)return null;
+  const perto=refs.filter(r=>alvo/r.ke<=3&&r.ke/alvo<=3);if(perto.length)refs=perto;
+  refs.sort((a,b)=>b.p.data.localeCompare(a.p.data));refs=refs.slice(0,6);
+  const pr=refs.map(r=>r.sg*Math.pow(alvo/r.ke,1.06)).sort((a,b)=>a-b);
+  const med=pr.length%2?pr[(pr.length-1)/2]:(pr[pr.length/2-1]+pr[pr.length/2])/2;
+  let lo=pr[0],hi=pr[pr.length-1];if(hi-lo<med*.1){lo=med*.95;hi=med*1.05}
+  return {med,lo,hi,n:refs.length,refs,alvo}}
+function wbgtSimples(t,rh){const e=rh/100*6.105*Math.exp(17.27*t/(237.7+t));return .567*t+.393*e+3.94}
+function bandeira(w){return w<10?["frio","Frio","Risco de hipotermia se parares ou molhares. Leva camada quente e corta-vento."]:
+  w<18?["verde","Baixo","Risco de calor baixo."]:w<23?["amarela","Moderado","Risco de calor moderado: abranda nas subidas expostas e bebe com sede."]:
+  w<28?["vermelha","Alto","Risco de calor alto: corre mais devagar, molha a cabeça e o pescoço, e desiste perante tonturas, confusão ou náuseas."]:
+  ["preta","Extremo","Risco de calor extremo: as recomendações apontam para cancelar ou não participar."]}
+const calorMemo={};
+function carregarCalor(p,c){const k=p.id;if(calorMemo[k])return;calorMemo[k]={estado:"a"};
+  fetch("https://api.open-meteo.com/v1/forecast?latitude="+c[0]+"&longitude="+c[1]+"&hourly=temperature_2m,relative_humidity_2m&timezone=Europe%2FLisbon&start_date="+p.data+"&end_date="+(()=>{const d=parseD(p.data);d.setDate(d.getDate()+1);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")})())
+    .then(r=>r.ok?r.json():Promise.reject()).then(j=>{calorMemo[k]={estado:"ok",h:j.hourly};draw()}).catch(()=>{calorMemo[k]={estado:"erro"};draw()})}
+function prevProva(p){if(!podeMarcar()||!me||!pres[p.id]||!pres[p.id][me])return null;
+  const ck="dorsal.prev."+p.id;let cfg={};try{cfg=JSON.parse(store.get(ck)||"{}")}catch(_){}
+  const x=exDe(p.id,me);const kmP=(()=>{const m=String(x.percurso||"").match(/(\d+(?:[.,]\d+)?)\s*k/i)||String(p.distancias||"").match(/(\d+(?:[.,]\d+)?)\s*k/i);return m?m[1].replace(",","."):""})();
+  const val=k=>cfg[k]!=null&&cfg[k]!==""?cfg[k]:"";
+  const box=h("section",{class:"grupo-bloco prevprova"});
+  const guardar=()=>{store.set(ck,JSON.stringify(cfg))};
+  const inp=(k,attrs)=>{const i=h("input",Object.assign({value:val(k)},attrs));i.addEventListener("change",()=>{cfg[k]=i.value.trim();guardar();desenhar()});return i};
+  const campos=h("div",{class:"prevcampos"},
+    h("label",null,"Km",inp("km",{inputmode:"decimal",placeholder:kmP||"25"})),
+    h("label",null,"D+ (m)",inp("dp",{inputmode:"numeric",placeholder:"1200"})),
+    h("label",null,"Partida",inp("hora",{type:"time",placeholder:"08:00",value:val("hora")||p.hora||""})),
+    h("label",{class:"full"},"Abastecimentos ao km (opcional)",inp("abs",{inputmode:"decimal",placeholder:"8; 15; 22"})));
+  const out=h("div",{class:"prevout"});
+  function desenhar(){out.replaceChildren();
+    const km=parseFloat(String(val("km")||kmP).replace(",","."))||0,dp=parseInt(val("dp"),10)||0,hora=val("hora")||p.hora||"";
+    if(!km){out.append(h("p",{class:"hint",text:"Indica os km e o D+ do teu percurso para veres a previsão."}));return}
+    const pv=preverTempo(me,km,dp);let dur=pv?pv.med:null;
+    if(pv){const conf=pv.n>=4?"boa":pv.n>=2?"média":"baixa";
+      out.append(h("div",{class:"prevtempo"},h("span",{class:"k",text:"Tempo previsto"}),h("b",{text:fmtH(Math.round(pv.med))}),
+        h("span",{class:"hint",text:"entre "+fmtH(Math.round(pv.lo))+" e "+fmtH(Math.round(pv.hi))+" · "+ritmo(pv.med,km)+" · confiança "+conf+" ("+pv.n+(pv.n===1?" prova tua":" provas tuas")+")"})));
+      if(hora){const [H,M]=hora.split(":").map(Number);const t0=parseD(p.data);t0.setHours(H,M,0,0);const hh=d=>String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+        const abs=String(val("abs")||"").split(/[;\s]+/).map(v=>parseFloat(v.replace(",","."))).filter(v=>v>0&&v<km).sort((a,b)=>a-b);
+        const pts=[...abs.map((k,i)=>["Abast. "+(i+1)+" · km "+String(k).replace(".",","),k]),["Meta · km "+String(km).replace(".",","),km]];
+        out.append(h("ol",{class:"passagens"},h("li",null,h("b",{text:hora}),h("span",{text:"Partida"})),...pts.map(([n,k])=>h("li",null,h("b",{text:hh(new Date(t0.getTime()+pv.med*1000*k/km))}),h("span",{text:n})))));
+        if(abs.length)out.append(h("p",{class:"hint",text:"As horas de passagem assumem que o D+ está distribuído por igual pelo percurso."}))}}
+    else out.append(h("p",{class:"hint",text:"Para prever o teu tempo, regista pelo menos uma prova feita com km, D+ e tempo (em O grupo, Provas feitas)."}));
+    // calor
+    const dias=Math.round((parseD(p.data)-hoje())/864e5),c=coordsDe(p),durH=Math.max(1,(dur||km*600)/3600);
+    if(c&&dias>=0&&dias<=15&&hora){carregarCalor(p,c);const m=calorMemo[p.id];
+      if(m&&m.estado==="ok"){const [H]=hora.split(":").map(Number);const i0=m.h.time.findIndex(t=>t===p.data+"T"+String(H).padStart(2,"0")+":00");
+        if(i0>=0){const n=Math.min(m.h.time.length-i0,Math.ceil(durH)+1);const horas=[];for(let i=i0;i<i0+n;i++){const w=wbgtSimples(m.h.temperature_2m[i],m.h.relative_humidity_2m[i]);horas.push([m.h.time[i].slice(11,13)+"h",m.h.temperature_2m[i],w])}
+          const wmax=Math.max(...horas.map(x=>x[2])),wmin=Math.min(...horas.map(x=>x[2])),b=bandeira(wmax),bf=wmin<10&&wmax>=10?bandeira(wmin):null;
+          out.append(h("div",{class:"calor band-"+b[0]},h("div",{class:"calorcab"},h("span",{class:"k",text:"Calor durante a prova"}),h("b",{text:b[1]})),
+            h("div",{class:"horas"},...horas.map(([hr,t,w])=>h("span",{class:"hr hb-"+bandeira(w)[0],title:"WBGT ≈ "+w.toFixed(1)+" °C"},h("small",{text:hr}),h("b",{text:Math.round(t)+"°"})))),
+            h("p",{text:b[2]+(bf?" "+bf[2]:"")}),
+            h("small",{class:"hint",text:"WBGT estimado até "+wmax.toFixed(0)+" °C (aproximação com temperatura e humidade; subestima ao sol forte e sobrestima com nuvens ou vento) [3–5]."})))}}
+      else if(m&&m.estado==="erro")out.append(h("p",{class:"hint",text:"Não foi possível obter a previsão horária do tempo."}))}
+    else if(hora&&dias>15)out.append(h("p",{class:"hint",text:"O risco de calor aparece a partir de 15 dias antes da prova."}));
+    else if(!hora)out.append(h("p",{class:"hint",text:"Indica a hora de partida para veres o risco de calor."}));
+    // hidratação e hidratos
+    const hcLo=durH<=2.5?30:60,hcHi=durH<=2.5?60:90;
+    out.append(h("div",{class:"hidra"},h("span",{class:"k",text:"Plano por hora ("+String(Math.round(durH*10)/10).replace(".",",")+" h)"}),
+      h("ul",null,
+        h("li",null,h("b",{text:"Líquidos: "}),"bebe com sede; como referência, 450–750 mL/h (150–250 mL a cada 20 min). Total ≈ "+String(Math.round(.45*durH*10)/10).replace(".",",")+"–"+String(Math.round(.75*durH*10)/10).replace(".",",")+" L [6, 7]."),
+        h("li",null,h("b",{text:"Hidratos: "}),durH<1?"abaixo de 1 h não são precisos.":hcLo+"–"+hcHi+" g/h, ≈ "+Math.round(hcLo*durH)+"–"+Math.round(hcHi*durH)+" g no total [8]."),
+        durH>=4?h("li",null,h("b",{text:"Sódio: "}),"em provas longas, a ISSN refere bebidas com mais de 575 mg de sódio por litro, mais do que a maioria das bebidas comerciais [6]."):null,
+        h("li",{class:"alerta"},h("b",{text:"Não bebas por calendário acima da sede: "}),"ganhar peso durante a prova é sinal de excesso de água e risco de hiponatremia, que pode ser grave [7]."))))}
+  desenhar();
+  box.append(h("h3",{text:"A tua prova: tempo, calor e hidratação"}),campos,out,
+    h("details",{class:"fontes mini"},h("summary",null,h("strong",{text:"Fontes e limites"})),
+      h("p",{class:"hint",text:"Previsão: o teu ritmo por km-esforço nas tuas provas, ajustado à distância com o expoente de Riegel. É uma estimativa: terreno técnico, calor, noite e altitude mudam muito o resultado. Não substitui avaliação médica."}),
+      h("ol",null,...FONTES_PREV.map(([t,u])=>h("li",null,t+" ",h("a",{href:u,target:"_blank",rel:"noopener",text:"Abrir ↗"}))))));
+  return box}
+
 // ---------- membros ----------
 const linkMembro=id=>"#s=membro&m="+id;
 const fmtKm=n=>fmtN(Math.round(n*10)/10);
@@ -652,6 +735,7 @@ function detalhe(pid){const box=$("view-prova");box.replaceChildren();
       const boleia=h("div",{class:"chips"},...[["","Vou por mim"],["oferece","Ofereço boleia"],["precisa","Preciso de boleia"]].map(([v,t])=>h("button",{type:"button",class:"chip-reg","aria-pressed":String(x.boleia===v),onclick:()=>setExtra(p.id,{boleia:v,lugares:v==="oferece"?(x.lugares||3):0})},t)));
       const lug=x.boleia==="oferece"?h("label",{class:"lug"},"Lugares livres ",(()=>{const s=h("select",{onchange:e=>setExtra(p.id,{lugares:+e.target.value})},...[1,2,3,4,5,6,7].map(n=>h("option",{value:String(n),text:String(n)})));s.value=String(x.lugares||3);return s})()):null;
       return h("div",{class:"plano"},h("strong",{text:"O teu plano"}),ops.length?selP:h("input",{placeholder:"Percurso (por exemplo 25K)",maxlength:"40",value:x.percurso,onchange:e=>setExtra(p.id,{percurso:e.target.value.trim()})}),boleia,lug)})():null,
+    eTreino(p)?null:prevProva(p),
     gente,
     (()=>{if(!grupo)return null;const ofer=[],prec=[];for(const id of Object.keys(pres[p.id]||{})){const x=exDe(p.id,id);if(x.boleia==="oferece")ofer.push(id);if(x.boleia==="precisa")prec.push(id)}
       if(!ofer.length&&!prec.length)return null;const livres=ofer.reduce((a,id)=>a+(exDe(p.id,id).lugares||0),0);

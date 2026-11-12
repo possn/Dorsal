@@ -463,3 +463,32 @@ details.fontes[open] summary strong::before{content:"▾ "}
 .objform label{display:flex;flex-direction:column;gap:4px;font-weight:600;font-size:.9rem}
 .objform input{width:120px}
 .meuano.vazio{padding:8px 14px}.meuano.vazio .objetivo{margin:0;padding:0;border:0}
+/* previsão da prova */
+.prevprova h3{margin-bottom:10px}
+.prevcampos{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.prevcampos label{display:flex;flex-direction:column;gap:3px;font-size:.8rem;font-weight:700;color:var(--muted,#6b6b6b);min-width:0}
+.prevcampos label.full{grid-column:1/-1}
+.prevcampos input{width:100%;min-width:0;font-size:1rem;padding:8px}
+.prevout{display:flex;flex-direction:column;gap:12px}
+.prevout .k{display:block;font-size:.72rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted,#6b6b6b)}
+.prevtempo b{display:block;font-family:var(--display);font-size:2.4rem;line-height:1;margin:2px 0}
+.passagens{list-style:none;margin:0;padding:0 0 0 14px;border-left:3px solid var(--accent)}
+.passagens li{display:flex;gap:10px;align-items:baseline;padding:3px 0;position:relative}
+.passagens li::before{content:"";position:absolute;left:-21px;top:.6em;width:11px;height:11px;border-radius:50%;background:var(--surface);border:3px solid var(--accent)}
+.passagens b{min-width:48px;font-variant-numeric:tabular-nums}
+.calor{border-radius:12px;padding:12px;border:1px solid var(--line)}
+.calor p{margin:8px 0 4px}
+.calorcab{display:flex;justify-content:space-between;align-items:baseline}
+.calorcab b{font-size:1.1rem}
+.horas{display:flex;gap:4px;overflow-x:auto;margin-top:8px}
+.horas .hr{display:flex;flex-direction:column;align-items:center;min-width:42px;padding:5px 2px;border-radius:8px;font-variant-numeric:tabular-nums}
+.horas small{font-size:.7rem;opacity:.8}
+.band-frio{background:#e3eef9;color:#123a63}.band-verde{background:#e2f2e6;color:#1d4d2c}.band-amarela{background:#fff4c7;color:#5b4700}
+.band-vermelha{background:#fde0dc;color:#7a1b12}.band-preta{background:#2b2b2b;color:#fff}
+.calor.band-verde,.calor.band-frio,.calor.band-amarela,.calor.band-vermelha,.calor.band-preta{border-color:transparent}
+.hidra ul{margin:6px 0 0;padding-left:0;list-style:none;display:flex;flex-direction:column;gap:6px}
+.hidra li.alerta{background:color-mix(in srgb,var(--accent) 10%,transparent);border-radius:8px;padding:8px 10px}
+details.fontes.mini{margin-top:12px;padding-top:6px;font-size:.8rem}
+.horas .hr{background:var(--surface);color:var(--fg);border-top:4px solid var(--line)}
+.hb-frio{border-top-color:#5b8fc7 !important}.hb-verde{border-top-color:#3c8a55 !important}.hb-amarela{border-top-color:#e2b300 !important}
+.hb-vermelha{border-top-color:#d2412f !important}.hb-preta{border-top-color:#111 !important}
