@@ -226,3 +226,8 @@ create extension if not exists pg_cron;
 --   url:='https://gubjzbirpkwrxoreqvfm.supabase.co/functions/v1/notificar',
 --   headers:=jsonb_build_object('Content-Type','application/json','Authorization','Bearer <ANON_KEY>'),
 --   body:='{"tipo":"lembretes"}'::jsonb)$$);
+-- Resumo da semana, domingo às 19:00 UTC.
+-- select cron.schedule('dorsal-semana','0 19 * * 0', $$select net.http_post(
+--   url:='https://gubjzbirpkwrxoreqvfm.supabase.co/functions/v1/notificar',
+--   headers:=jsonb_build_object('Content-Type','application/json','Authorization','Bearer <ANON_KEY>'),
+--   body:='{"tipo":"semana"}'::jsonb)$$);

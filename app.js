@@ -402,16 +402,47 @@ function registoForm(){const v=id=>$(id)?$(id).value:"";
   f.querySelector("#rPerc").value="Trail curto";
   for(const k in regDraft){const el=f.querySelector("#"+k);if(el&&el.type!=="file")el.value=regDraft[k]}
   const guarda=e=>{if(e.target.id&&e.target.type!=="file")regDraft[e.target.id]=e.target.value};f.addEventListener("input",guarda);f.addEventListener("change",guarda);return f}
+let apagarHist=null;
+function editarFeita(p,x,quem){const minha=p.grupo&&p.grupo===grupo;
+  const inp=(id,attrs)=>h("input",Object.assign({id},attrs));
+  const f=h("form",{class:"form registo editfeita",onsubmit:async e=>{e.preventDefault();const b=f.querySelector("button[type=submit]");
+      const t=normTempo($("eTempo").value);if(t===null){toast("Escreve o tempo como 4:35:12");return}
+      const km=$("eKm").value.trim()?+$("eKm").value.replace(",","."):null,dp=$("eD").value.trim()?parseInt($("eD").value,10):null;
+      if(km!=null&&!(km>=0&&km<=400)){toast("Km entre 0 e 400.");return}if(dp!=null&&!(dp>=0&&dp<=20000)){toast("D+ entre 0 e 20000 m.");return}
+      let prova=null;if(minha){const nome=$("eNome").value.trim(),data=$("eData").value;if(!nome||!data){toast("Falta o nome ou a data.");return}if(data>hojeISO()){toast("A data tem de ser de hoje ou antes.");return}
+        prova={nome:nome.slice(0,120),data,distrito:$("eDist").value,concelho:$("eConc").value.trim().slice(0,80),distancias:$("ePerc").value}}
+      b.disabled=true;
+      try{if(prova){await api("provas?id=eq."+encodeURIComponent(p.id),{method:"PATCH",prefer:"return=minimal",body:prova});Object.assign(p,prova)}
+        const ok=await setExtra(p.id,{km,dplus:dp,tempo:t||"",percurso:$("ePerc").value});if(ok){editHist=null;toast("Guardado");draw()}}
+      catch(err){toast("Não foi possível guardar. Tenta outra vez.")}finally{b.disabled=false}}},
+    minha?h("label",{class:"full",for:"eNome"},"Nome da prova",inp("eNome",{required:true,maxlength:"120",value:p.nome})):null,
+    minha?h("label",{for:"eData"},"Data",inp("eData",{type:"date",required:true,max:hojeISO(),value:p.data})):null,
+    h("label",{for:"ePerc"},"Percurso",h("select",{id:"ePerc"},...[...new Set([...PERCURSOS,x.percurso||""])].filter(Boolean).map(v=>h("option",{value:v,text:v})))),
+    minha?h("label",{for:"eDist"},"Distrito",h("select",{id:"eDist"},h("option",{value:"",text:"—"}),...DISTRITOS.map(d=>h("option",{value:d,text:d})))):null,
+    minha?h("label",{for:"eConc"},"Concelho ou terra",inp("eConc",{maxlength:"80",value:p.concelho||""})):null,
+    h("label",{for:"eKm"},"Km",inp("eKm",{inputmode:"decimal",placeholder:"25",value:x.km!=null?String(x.km).replace(".",","):""})),
+    h("label",{for:"eD"},"D+ (m)",inp("eD",{inputmode:"numeric",placeholder:"1200",value:x.dplus!=null?String(x.dplus):""})),
+    h("label",{class:"full",for:"eTempo"},"Tempo",inp("eTempo",{inputmode:"numeric",placeholder:"3:45:10",value:x.tempo||""})),
+    minha?null:h("p",{class:"hint full",text:"O nome, a data e o local desta prova vêm do calendário geral e não se mudam aqui. Os teus dados sim."}),
+    h("div",{class:"full row"},h("button",{class:"btn primary",type:"submit",text:"Guardar"}),h("button",{class:"btn",type:"button",onclick:()=>{editHist=null;apagarHist=null;draw()},text:"Cancelar"}),
+      h("button",{class:"btn danger",type:"button",onclick:()=>tirarFeita(p,quem),text:apagarHist===p.id?(minha&&quem.length===1?"Confirmar: apagar a prova":"Confirmar: tirar da lista"):(minha&&quem.length===1?"Apagar prova":"Tirar da minha lista")})));
+  const pc=f.querySelector("#ePerc");pc.value=x.percurso||p.distancias&&PERCURSOS.find(v=>v===p.distancias)||"Trail curto";
+  if(minha)f.querySelector("#eDist").value=p.distrito||"";
+  return f}
+async function tirarFeita(p,quem){if(apagarHist!==p.id){apagarHist=p.id;draw();return}apagarHist=null;
+  const apagaProva=p.grupo&&p.grupo===grupo&&quem.length===1;
+  try{await api("presencas?membro_id=eq."+me+"&prova_id=eq."+encodeURIComponent(p.id),{method:"DELETE"});
+    if(apagaProva){try{await api("trilhos?membro_id=eq."+me+"&prova_id=eq."+encodeURIComponent(p.id),{method:"DELETE"})}catch(_){}
+      await api("provas?id=eq."+encodeURIComponent(p.id),{method:"DELETE"})}
+    editHist=null;toast(apagaProva?"Prova apagada":"Tirada da tua lista");await carregar()}
+  catch(err){toast("Não foi possível. Tenta outra vez.");draw()}}
 function historico(){if(!grupo||!me)return null;const ano=String(new Date().getFullYear());
   const ids=new Set();for(const p of passadas)if(p.data.startsWith(ano))for(const id of Object.keys(pres[p.id]||{}))if(foiA(p.id,id))ids.add(id);
   const quadro=[...ids].map(id=>[id,totais(id,ano)]).sort((a,b)=>quadroPor==="km"?(b[1].km-a[1].km||b[1].n-a[1].n):(b[1].n-a[1].n||b[1].km-a[1].km)||nomeDe(a[0]).localeCompare(nomeDe(b[0]),"pt"));
   const linha=p=>{const quem=Object.keys(pres[p.id]||{}).filter(id=>foiA(p.id,id)).sort((a,b)=>nomeDe(a).localeCompare(nomeDe(b),"pt"));const d=parseD(p.data);
     let meu=null;if(quem.includes(me)&&podeMarcar()){const x=exDe(p.id,me);
-      if(editHist===p.id){const iK=h("input",{inputmode:"decimal",placeholder:"km",value:x.km!=null?String(x.km).replace(".",","):"","aria-label":"Km"}),iD=h("input",{inputmode:"numeric",placeholder:"D+ m",value:x.dplus!=null?String(x.dplus):"","aria-label":"Desnível positivo"}),iT=h("input",{inputmode:"numeric",placeholder:"h:mm:ss",value:x.tempo,"aria-label":"Tempo"});
-        meu=h("form",{class:"tempoform",onsubmit:e=>{e.preventDefault();const t=normTempo(iT.value);if(t===null){toast("Escreve o tempo como 4:35:12");return}
-          const km=iK.value.trim()?+iK.value.replace(",","."):null,dp=iD.value.trim()?parseInt(iD.value,10):null;if(km!=null&&!(km>=0&&km<=400)){toast("Km entre 0 e 400.");return}if(dp!=null&&!(dp>=0&&dp<=20000)){toast("D+ entre 0 e 20000 m.");return}
-          setExtra(p.id,{km,dplus:dp,tempo:t}).then(ok=>{if(ok){editHist=null;toast("Guardado");draw()}})}},iK,iD,iT,h("button",{class:"btn small primary",type:"submit",text:"Guardar"}))}
-      else meu=h("button",{class:"linkbtn",type:"button",onclick:()=>{editHist=p.id;draw()},text:(x.km||x.tempo)?"Editar os meus dados":"Acrescentar km, D+ e tempo"})}
+      if(editHist===p.id)meu=editarFeita(p,x,quem);
+      else meu=h("button",{class:"linkbtn",type:"button",onclick:()=>{editHist=p.id;draw()},text:"✎ Editar"})}
     return h("li",{class:"hist"},h("div",{class:"hist-top"},h("span",{class:"hd",text:d.getDate()+" "+MESES[d.getMonth()].slice(0,3)+" "+d.getFullYear()}),h("button",{class:"titlebtn",onclick:()=>abrir(p.id),text:p.nome})),
       quem.length?h("div",{class:"people"},...quem.map(id=>{const x=exDe(p.id,id);return h("span",{class:"p inscrito",text:nomeDe(id)+(x.percurso?" · "+x.percurso:"")+(x.km?" · "+fmtN(+x.km)+" km":"")+(x.tempo?" · "+x.tempo:"")+(temTrilho.has(p.id+"|"+id)?" · 📍":"")})})):null,meu)};
   const lista=passadas.filter(p=>Object.keys(pres[p.id]||{}).some(id=>foiA(p.id,id)));

@@ -356,3 +356,7 @@ table.pt tr.prova td{background:var(--orange-soft);font-weight:600}
 .plist li{display:flex;flex-direction:column;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line)}
 .plist li:first-child{border-top:0}
 .plist small{color:var(--muted,#6b6b6b)}
+.btn.danger{color:#b3261e;border-color:#e3b4ae;margin-left:auto}
+@media (prefers-color-scheme: dark){.btn.danger{color:#ff9b8f;border-color:#6b2c26}}
+.editfeita{margin-top:8px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.editfeita .row{flex-wrap:wrap;gap:8px}

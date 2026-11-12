@@ -3,6 +3,7 @@
 // POST { comentario_id } ou { tipo: "comentario", comentario_id }  (cabeçalho x-grupo) -> mensagem nova na conversa de uma prova
 // POST { tipo: "presenca", prova_id, membro_id }                    (cabeçalho x-grupo) -> alguém marcou Inscrito ou Vou
 // POST { tipo: "lembretes" }                                         -> lembrete na véspera (chamado pelo pg_cron)
+// POST { tipo: "semana", teste? }                                    -> resumo da semana, domingo à noite (pg_cron); teste=true só pré-visualiza
 import webpush from "npm:web-push@3.6.7";
 
 const URL_BASE = Deno.env.get("SUPABASE_URL")!;
@@ -127,6 +128,43 @@ async function lembretes() {
   return { enviadas, provas: provas.length };
 }
 
+const DSEM = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+async function semana(teste: boolean) {
+  // de amanhã a daqui a 7 dias (hora de Lisboa)
+  const lx = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Lisbon" }));
+  const ini = new Date(lx); ini.setDate(ini.getDate() + 1);
+  const fim = new Date(lx); fim.setDate(fim.getDate() + 7);
+  const provas = await db(`provas?data=gte.${iso(ini)}&data=lte.${iso(fim)}&select=id,nome,data&order=data`);
+  if (!provas || !provas.length) return { enviadas: 0, motivo: "sem provas na semana" };
+  const ids = provas.map((p: { id: string }) => `"${encodeURIComponent(p.id)}"`).join(",");
+  const pres = await db(`presencas?prova_id=in.(${ids})&estado=in.(inscrito,vou,talvez)&select=grupo,membro_id,prova_id,estado`) || [];
+  const porGrupo: Record<string, { membro_id: string; prova_id: string; estado: string }[]> = {};
+  for (const x of pres) (porGrupo[x.grupo] ||= []).push(x);
+  let enviadas = 0; const previas: unknown[] = [];
+  for (const [grupo, lista] of Object.entries(porGrupo)) {
+    const [g, ms] = await Promise.all([nomeGrupo(grupo), db(`membros?grupo=eq.${grupo}&select=id,nome`)]);
+    const nome: Record<string, string> = Object.fromEntries((ms || []).map((m: { id: string; nome: string }) => [m.id, m.nome]));
+    const linhas: string[] = [];
+    for (const p of provas) {
+      const aqui = lista.filter((x) => x.prova_id === p.id);
+      if (!aqui.length) continue;
+      const vao = aqui.filter((x) => x.estado !== "talvez").map((x) => (nome[x.membro_id] || "?") + (x.estado === "inscrito" ? " ✓" : ""));
+      const talvez = aqui.filter((x) => x.estado === "talvez").length;
+      const d = new Date(p.data + "T12:00:00");
+      linhas.push(`${DSEM[d.getDay()]} ${d.getDate()} · ${p.nome}: ${vao.join(", ") || "ninguém confirmado"}${talvez ? ` (+${talvez} talvez)` : ""}`);
+    }
+    if (!linhas.length) continue;
+    const payload = { title: `Esta semana${g ? " · " + g : ""}`, body: linhas.join("\n").slice(0, 400), url: `./?g=${grupo}`, tag: `semana-${grupo}` };
+    if (teste) { previas.push(payload); continue; }
+    if (!(await primeiraVez(`sem:${grupo}:${iso(ini)}`))) continue;
+    const subs = await db(`subscricoes?grupo=eq.${grupo}&select=endpoint,p256dh,auth`);
+    enviadas += await enviar(subs || [], JSON.stringify(payload));
+  }
+  return teste ? { previas } : { enviadas, grupos: Object.keys(porGrupo).length };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
@@ -137,6 +175,7 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const tipo = body.tipo || (body.comentario_id ? "comentario" : "");
     if (tipo === "lembretes") return json(await lembretes());
+    if (tipo === "semana") return json(await semana(body.teste === true));
     const grupo = (req.headers.get("x-grupo") || "").toLowerCase();
     if (!/^[a-z0-9]{6,40}$/.test(grupo)) return json({ erro: "pedido inválido" }, 400);
     if (tipo === "comentario" && Number.isInteger(body.comentario_id)) return json(await comentario(grupo, body.comentario_id));
