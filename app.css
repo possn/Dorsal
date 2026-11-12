@@ -513,3 +513,13 @@ details.fontes.mini{margin-top:12px;padding-top:6px;font-size:.8rem}
 .anobanner .k{font-size:.72rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.85}
 .anobanner .t{font-family:var(--display);font-size:1.6rem;font-weight:800;text-transform:uppercase}
 .anobanner .s{font-size:.9rem;opacity:.9}
+/* boleias */
+.carros{list-style:none;margin:6px 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.carro{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface)}
+.carro .leva{margin-top:4px}
+.carro .custo{margin-top:6px;font-size:.88rem}
+.semlugar{background:color-mix(in srgb,var(--accent) 12%,transparent);border-radius:8px;padding:8px 10px}
+.ajcusto{margin-top:8px;font-size:.9rem}.ajcusto summary{cursor:pointer;font-weight:600}
+.ajcusto .prevcampos{margin-top:8px}
+.casaset{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.casaset .row{gap:8px;flex-wrap:wrap}.casaset input{flex:1;min-width:180px}

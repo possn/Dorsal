@@ -263,3 +263,7 @@ alter table public.provas add column if not exists hora text;
 alter table public.membros add column if not exists objetivo_km int check (objetivo_km is null or (objetivo_km between 1 and 20000));
 grant update (objetivo_km) on public.membros to anon, authenticated;
 -- create policy membros_objetivo on public.membros for update to anon, authenticated using (grupo = public.grupo_atual()) with check (grupo = public.grupo_atual());
+
+-- ---------- concelho de partida para boleias ----------
+alter table public.membros add column if not exists casa text check (casa is null or char_length(casa) <= 80);  -- "Concelho|Distrito"
+grant update (casa) on public.membros to anon, authenticated;

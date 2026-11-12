@@ -16,7 +16,7 @@ let grupo=null,grupoNome="",grupoLogo="",me=null;
 let extra={},meteo={},passadas=[],nCom={},conv={},maxCom={},novas={},temTrilho=new Set(),trilhosP={},mapas={};
 const lidas=()=>{try{return JSON.parse(store.get("dorsal.lidas."+grupo)||"null")}catch(_){return null}},guardarLidas=L=>store.set("dorsal.lidas."+grupo,JSON.stringify(L));
 function marcarLida(pid,id){if(!id)return;const L=lidas()||{};if((L[pid]||0)<id){L[pid]=id;guardarLidas(L)}if(novas[pid]){delete novas[pid]}}
-let objetivos={};let provas=[],membros={},pres={},cliques={},loaded=false;
+let objetivos={},casas={};let provas=[],membros={},pres={},cliques={},loaded=false;
 let histTodas=false,vistaCal=store.get("dorsal.vista")==="cal",calMes=null,calDia=null;
 let filtroReg=store.get("dorsal.regiao")||"",filtroDist=store.get("dorsal.distrito")||"";
 let casa=null;try{casa=JSON.parse(store.get("dorsal.casa")||"null")}catch(_){}
@@ -66,12 +66,12 @@ async function carregar(){
   try{
     const hoje=hojeISO();
     const reqs=[api("provas?select=*&data=gte."+hoje+"&order=data.asc,nome.asc")];
-    if(grupo)reqs.push(api("grupos?select=nome,logo&codigo=eq."+grupo),api("membros?select=id,nome,objetivo_km&order=nome.asc"),api("presencas?select=membro_id,prova_id,estado,percurso,boleia,lugares,tempo,km,dplus"),api("cliques?select=prova_id"),api("comentarios?select=prova_id,id,membro_id").catch(()=>[]),api("trilhos?select=prova_id,membro_id").catch(()=>[]));
+    if(grupo)reqs.push(api("grupos?select=nome,logo&codigo=eq."+grupo),api("membros?select=id,nome,objetivo_km,casa&order=nome.asc"),api("presencas?select=membro_id,prova_id,estado,percurso,boleia,lugares,tempo,km,dplus"),api("cliques?select=prova_id"),api("comentarios?select=prova_id,id,membro_id").catch(()=>[]),api("trilhos?select=prova_id,membro_id").catch(()=>[]));
     const [ps,gs,ms,pr,cl,co,tr]=await Promise.all(reqs);if(grupo)verAdmin().then(()=>{if(!$("editarGrupo").hidden)painelAdmin()});if(tr){temTrilho=new Set(tr.map(x=>x.prova_id+"|"+x.membro_id))}
     provas=ps||[];
     if(grupo){
       if(!gs||!gs.length){status("Esse código de grupo não existe. Confirma o link que recebeste.");esquecerGrupo(grupo);store.set("dorsal.grupo",null);grupo=null;membros={};pres={};}
-      else{grupoNome=gs[0].nome||"";grupoLogo=gs[0].logo||"";lembrarGrupo(grupo,grupoNome);membros={};objetivos={};for(const m of ms||[]){membros[m.id]=m.nome;if(m.objetivo_km)objetivos[m.id]=m.objetivo_km}
+      else{grupoNome=gs[0].nome||"";grupoLogo=gs[0].logo||"";lembrarGrupo(grupo,grupoNome);membros={};objetivos={};casas={};for(const m of ms||[]){membros[m.id]=m.nome;if(m.objetivo_km)objetivos[m.id]=m.objetivo_km;if(m.casa)casas[m.id]=m.casa}
         pres={};extra={};for(const x of pr||[]){(pres[x.prova_id]=pres[x.prova_id]||{})[x.membro_id]=x.estado;(extra[x.prova_id]=extra[x.prova_id]||{})[x.membro_id]={percurso:x.percurso||"",boleia:x.boleia||"",lugares:x.lugares||0,tempo:x.tempo||"",km:x.km,dplus:x.dplus}}
         {const ids=new Set(provas.map(p=>p.id)),falta=Object.keys(pres).filter(id=>!ids.has(id));passadas=[];
           if(falta.length){try{passadas=(await api("provas?select=*&order=data.desc&id=in.("+falta.map(i=>'"'+encodeURIComponent(i)+'"').join(",")+")"))||[]}catch(_){}}}
@@ -507,6 +507,42 @@ async function abrirAno(id,ano){const D=dadosAno(id,ano);if(!D){toast("Ainda nã
   const partilharTodas=async()=>{clearTimeout(timer);const fs=[];for(let k=0;k<S.length;k++)fs.push(new File([await blobDe(k)],"dorsal-"+ano+"-"+(k+1)+".png",{type:"image/png"}));enviar(fs)};
   document.body.append(ov);document.body.style.overflow="hidden";document.addEventListener("keydown",tecla);historia=ov;desenhar()}
 
+// ---------- boleias automáticas ----------
+function casaCoord(id){const v=casas[id];if(!v)return null;const [n,d]=v.split("|");const c=LUG.c.find(x=>x[0]===norm(n)&&(!d||x[1]===d));return c?[c[2],c[3]]:null}
+const casaNome=id=>casas[id]?casas[id].split("|")[0]:"";
+async function guardarCasa(v){try{await api("membros?id=eq."+me,{method:"PATCH",prefer:"return=minimal",body:{casa:v}});if(v)casas[me]=v;else delete casas[me];toast(v?"Terra guardada":"Terra retirada");draw()}catch(_){toast("Não foi possível guardar.")}}
+function casaSetter(){const dl=h("datalist",{id:"dlConc"},...LUG.c.map(c=>h("option",{value:c[4]+" ("+c[1]+")"})));
+  const inp=h("input",{list:"dlConc",placeholder:"Escreve o teu concelho",autocomplete:"off"});
+  const ok=()=>{const v=inp.value,m=v.match(/^(.*?)\s*\(([^)]+)\)\s*$/);const nome=norm(m?m[1]:v),dist=m?m[2]:null;const c=LUG.c.find(x=>x[0]===nome&&(!dist||x[1]===dist));if(!c){toast("Não encontrei esse concelho.");return}guardarCasa(c[4]+"|"+c[1])};
+  inp.addEventListener("change",ok);
+  const sug=casa&&casa.nome?(()=>{const c=LUG.c.find(x=>x[4]===casa.nome)||LUG.c.reduce((a,x)=>!a||distKm([casa.lat,casa.lon],[x[2],x[3]])<distKm([casa.lat,casa.lon],[a[2],a[3]])?x:a,null);return c?h("button",{type:"button",class:"chip-reg",onclick:()=>guardarCasa(c[4]+"|"+c[1]),text:"Usar "+c[4]}):null})():null;
+  return h("div",{class:"casaset"},h("span",{class:"hint",text:"Para a app combinar as boleias, diz de que concelho sais. Só o grupo vê, e só o concelho."}),h("div",{class:"row"},inp,sug),dl)}
+function planoBoleias(p){const ofer=[],prec=[];for(const id of Object.keys(pres[p.id]||{})){if(!foiA(p.id,id)&&pres[p.id][id]!=="talvez")continue;const x=exDe(p.id,id);if(x.boleia==="oferece")ofer.push(id);if(x.boleia==="precisa")prec.push(id)}
+  const lug={};for(const d of ofer)lug[d]=Math.max(0,exDe(p.id,d).lugares||3);
+  const pares=[];for(const n of prec)for(const d of ofer){const a=casaCoord(n),b=casaCoord(d);pares.push([n,d,a&&b?distKm(a,b)*1.3:Infinity])}
+  pares.sort((a,b)=>a[2]-b[2]);const leva={},atrib={};for(const d of ofer)leva[d]=[];
+  for(const [n,d,km] of pares){if(atrib[n]||leva[d].length>=lug[d])continue;atrib[n]=d;leva[d].push([n,km])}
+  return {ofer,prec,leva,semLugar:prec.filter(n=>!atrib[n])}}
+function boleiasView(p){if(!grupo)return null;const B=planoBoleias(p);if(!B.ofer.length&&!B.prec.length)return null;
+  let cfg={};try{cfg=JSON.parse(store.get("dorsal.custo")||"{}")}catch(_){}const cons=+cfg.cons||6.5,preco=+cfg.preco||2.10,port=+(store.get("dorsal.portagens."+p.id)||0);
+  const destino=coordsDe(p);const livres=B.ofer.reduce((a,d)=>a+Math.max(0,(exDe(p.id,d).lugares||3)-B.leva[d].length),0);
+  const carro=d=>{const ps=B.leva[d],cd=casaCoord(d),kmIda=cd&&destino?distKm(cd,destino)*1.3:null;
+    const total=kmIda!=null?(kmIda*2*cons/100*preco+port):null,por=total!=null?total/(1+ps.length):null;
+    return h("li",{class:"carro"},h("div",{class:"cab"},h("b",{text:"🚗 "+nomeDe(d)}),casaNome(d)?h("span",{class:"hint",text:" sai de "+casaNome(d)}):h("span",{class:"hint",text:" (sem terra indicada)"})),
+      ps.length?h("div",{class:"leva"},"Leva: ",...ps.flatMap(([n,km],i)=>[i?", ":"",h("strong",{text:nomeDe(n)}),h("span",{class:"hint",text:km<Infinity?" ("+casaNome(n)+", ≈ "+Math.round(km)+" km)":" (sem terra)"})])):h("div",{class:"hint",text:"Ainda vai sozinho · "+(exDe(p.id,d).lugares||3)+" lugares livres"}),
+      total!=null?h("div",{class:"custo"},"≈ "+Math.round(kmIda*2)+" km ida e volta · ",h("b",{text:fmtEur(total)})," no total · ",h("b",{text:fmtEur(por)+" por pessoa"})):null)};
+  return h("section",{class:"grupo-bloco boleias"},h("h3",null,"Boleias ",h("span",{class:"n",text:livres+(livres===1?" lugar livre":" lugares livres")})),
+    B.ofer.length?h("ul",{class:"carros"},...B.ofer.map(carro)):null,
+    B.semLugar.length?h("p",{class:"semlugar"},h("strong",{text:"Ainda sem lugar: "}),B.semLugar.map(nomeDe).join(", ")):null,
+    (B.ofer.length&&B.prec.length)?h("p",{class:"hint",text:"Sugestão automática: junta quem mora mais perto de cada condutor, até encher os lugares. Combinem na conversa."}):null,
+    h("details",{class:"ajcusto"},h("summary",{text:"Ajustar custos"}),
+      h("div",{class:"prevcampos"},
+        h("label",null,"Consumo (L/100 km)",(()=>{const i=h("input",{inputmode:"decimal",value:String(cons).replace(".",",")});i.addEventListener("change",()=>{cfg.cons=parseFloat(i.value.replace(",","."))||6.5;store.set("dorsal.custo",JSON.stringify(cfg));draw()});return i})()),
+        h("label",null,"Preço (€/L)",(()=>{const i=h("input",{inputmode:"decimal",value:preco.toFixed(2).replace(".",",")});i.addEventListener("change",()=>{cfg.preco=parseFloat(i.value.replace(",","."))||2.10;store.set("dorsal.custo",JSON.stringify(cfg));draw()});return i})()),
+        h("label",null,"Portagens (€)",(()=>{const i=h("input",{inputmode:"decimal",value:port?String(port).replace(".",","):"",placeholder:"0"});i.addEventListener("change",()=>{store.set("dorsal.portagens."+p.id,String(parseFloat(i.value.replace(",","."))||0));draw()});return i})())),
+      h("p",{class:"hint",text:"Distâncias em linha recta entre concelhos × 1,3, como aproximação à estrada. Preço por defeito: média do gasóleo em Portugal em Novembro de 2026 (DGEG); ajusta ao teu carro."})))}
+const fmtEur=v=>(Math.round(v*100)/100).toFixed(2).replace(".",",")+" €";
+
 // ---------- membros ----------
 const linkMembro=id=>"#s=membro&m="+id;
 const fmtKm=n=>fmtN(Math.round(n*10)/10);
@@ -528,6 +564,8 @@ function perfil(id){const box=h("article",{class:"sec est perfil"});
     h("div",{class:"phead"},h("span",{class:"av grande","aria-hidden":"true",text:(nome.trim()[0]||"?").toUpperCase()}),h("div",null,h("h1",{text:nome}),h("p",{class:"hint",text:id===me?"És tu":(grupoNome||"")}))),
     h("div",{class:"meuano"},h("span",{class:"k",text:ano}),h("div",{class:"sts"},stat(String(t.n),t.n===1?"prova":"provas"),stat(fmtKm(t.km),"km"),stat(t.d>=1000?fmtN(Math.round(t.d/100)/10)+"k":String(Math.round(t.d)),"m D+"),t.sg?stat(fmtH(t.sg),"em prova"):null)),
     anelObjetivo(id,t.km,id===me),
+    id===me?h("p",{class:"hint terra"},casas[me]?"Sais de "+casaNome(me)+" para as boleias. ":"Ainda não indicaste o teu concelho para as boleias. ",casas[me]?h("button",{class:"linkbtn",type:"button",onclick:()=>guardarCasa(null),text:"Retirar"}):null):null,
+    id===me&&!casas[me]?casaSetter():null,
     ...(tudo.n>t.n?[h("p",{class:"hint",text:"Desde sempre: "+tudo.n+" provas · "+fmtKm(tudo.km)+" km · "+Math.round(tudo.d)+" m D+"})]:[]));
   const linhaProva=(p,extra)=>h("li",null,h("button",{class:"linkbtn",type:"button",onclick:()=>abrir(p.id),text:p.nome}),h("small",{text:[dataLonga(p.data),...extra].filter(Boolean).join(" · ")}));
   const prox=futuras().filter(p=>pres[p.id]&&pres[p.id][id]).sort((a,b)=>a.data.localeCompare(b.data));
@@ -806,14 +844,11 @@ function detalhe(pid){const box=$("view-prova");box.replaceChildren();
       const selP=h("select",{"aria-label":"O teu percurso",onchange:e=>setExtra(p.id,{percurso:e.target.value})},h("option",{value:"",text:"Que percurso vais fazer?"}),...ops.map(o=>h("option",{value:o,text:o})),x.percurso&&!ops.includes(x.percurso)?h("option",{value:x.percurso,text:x.percurso}):null);selP.value=x.percurso;
       const boleia=h("div",{class:"chips"},...[["","Vou por mim"],["oferece","Ofereço boleia"],["precisa","Preciso de boleia"]].map(([v,t])=>h("button",{type:"button",class:"chip-reg","aria-pressed":String(x.boleia===v),onclick:()=>setExtra(p.id,{boleia:v,lugares:v==="oferece"?(x.lugares||3):0})},t)));
       const lug=x.boleia==="oferece"?h("label",{class:"lug"},"Lugares livres ",(()=>{const s=h("select",{onchange:e=>setExtra(p.id,{lugares:+e.target.value})},...[1,2,3,4,5,6,7].map(n=>h("option",{value:String(n),text:String(n)})));s.value=String(x.lugares||3);return s})()):null;
-      return h("div",{class:"plano"},h("strong",{text:"O teu plano"}),ops.length?selP:h("input",{placeholder:"Percurso (por exemplo 25K)",maxlength:"40",value:x.percurso,onchange:e=>setExtra(p.id,{percurso:e.target.value.trim()})}),boleia,lug)})():null,
+      const casaEl=(x.boleia&&!casas[me])?casaSetter():null;
+      return h("div",{class:"plano"},h("strong",{text:"O teu plano"}),ops.length?selP:h("input",{placeholder:"Percurso (por exemplo 25K)",maxlength:"40",value:x.percurso,onchange:e=>setExtra(p.id,{percurso:e.target.value.trim()})}),boleia,lug,casaEl)})():null,
     eTreino(p)?null:prevProva(p),
     gente,
-    (()=>{if(!grupo)return null;const ofer=[],prec=[];for(const id of Object.keys(pres[p.id]||{})){const x=exDe(p.id,id);if(x.boleia==="oferece")ofer.push(id);if(x.boleia==="precisa")prec.push(id)}
-      if(!ofer.length&&!prec.length)return null;const livres=ofer.reduce((a,id)=>a+(exDe(p.id,id).lugares||0),0);
-      return h("section",{class:"grupo-bloco boleias"},h("h3",null,"Boleias ",h("span",{class:"n",text:livres+(livres===1?" lugar livre":" lugares livres")})),
-        ofer.length?h("p",null,h("strong",{text:"Oferecem: "}),ofer.map(id=>nomeDe(id)+" ("+(exDe(p.id,id).lugares||0)+")").join(", ")):null,
-        prec.length?h("p",null,h("strong",{text:"Precisam: "}),prec.map(nomeDe).join(", ")):null)})(),
+    boleiasView(p),
     conversa(p),
     planoView(p),
     trilhosView(p),
