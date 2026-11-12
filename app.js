@@ -387,5 +387,7 @@ window.addEventListener("hashchange",()=>{const a=provaAberta();if(a&&!ultimaAbe
 draw();carregar();
 setInterval(()=>{if(document.visibilityState==="visible"&&ONLINE)carregar()},30000);
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&ONLINE&&loaded)carregar()});
-if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+if("serviceWorker" in navigator){const tinha=!!navigator.serviceWorker.controller;let recarregou=false;
+  navigator.serviceWorker.addEventListener("controllerchange",()=>{if(tinha&&!recarregou){recarregou=true;location.reload()}});
+  window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(r=>{document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")r.update().catch(()=>{})})}).catch(()=>{}))}
 })();
