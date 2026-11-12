@@ -166,6 +166,8 @@ input,select{padding:9px 10px;border:1px solid var(--line);border-radius:6px;bac
 .gprev{width:72px;height:72px;border-radius:50%;object-fit:cover;border:1px solid var(--line);margin-right:8px}
 .vh{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
 .gform{padding:0;border:0}
+.tiposbar{margin-top:0!important}
+#tiposTxt{margin:-4px 0 8px}
 .regioes{display:flex;gap:6px;margin-top:12px;overflow-x:auto;padding:2px 0 10px;margin-bottom:2px;scrollbar-width:none}
 .regioes::-webkit-scrollbar{display:none}
 .chip-reg{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-weight:600;font-size:.9rem;white-space:nowrap}

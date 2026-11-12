@@ -249,13 +249,14 @@ function draw(){
   const tiposExist=[...new Set(fut.flatMap(tiposDe))].sort((a,b)=>{const ia=TIPOS_ORDEM.indexOf(a),ib=TIPOS_ORDEM.indexOf(b);return (ia<0?99:ia)-(ib<0?99:ib)||a.localeCompare(b,"pt")});
   $("tipos").replaceChildren(...tiposExist.map(t=>h("button",{type:"button",class:"chip-reg","aria-pressed":String(filtroTipos.has(t)),onclick:()=>{filtroTipos.has(t)?filtroTipos.delete(t):filtroTipos.add(t);store.set("dorsal.tipos",[...filtroTipos].join("|")||null);draw()}},t)));
   const semTipo=fut.filter(p=>!tiposDe(p).length).length;
-  $("tiposTxt").textContent=filtroTipos.size?(semTipo?semTipo+(semTipo===1?" prova ainda sem percursos publicados fica":" provas ainda sem percursos publicados ficam")+" de fora.":""):"Escolhe um ou mais. Sem escolha, aparecem todas.";
+  $("tiposTxt").textContent=filtroTipos.size&&semTipo?semTipo+(semTipo===1?" prova ainda sem percursos publicados fica":" provas ainda sem percursos publicados ficam")+" de fora deste filtro.":"";$("tiposTxt").hidden=!$("tiposTxt").textContent;
+  $("tipos").prepend(h("button",{type:"button",class:"chip-reg","aria-pressed":String(!filtroTipos.size),onclick:()=>{filtroTipos.clear();store.set("dorsal.tipos",null);draw()}},"Todos os percursos"));
   $("raios").replaceChildren(...[0,...RAIOS].map(r=>h("button",{type:"button",class:"chip-reg","aria-pressed":String(filtroRaio===r),disabled:!casa&&r?true:null,onclick:()=>{filtroRaio=r;store.set("dorsal.raio",r?String(r):null);draw()}},r?"até "+r+" km":"Qualquer distância")));
   const semLocal=fut.filter(p=>!coordsDe(p)).length;
   $("casaTxt").replaceChildren(...(casa?["Casa: ",h("strong",{text:casa.nome}),". ",h("button",{type:"button",class:"linkbtn",onclick:()=>{definirCasa(null);filtroRaio=0;store.set("dorsal.raio",null);draw()},text:"Esquecer"}),
     " Distância em linha recta até ao centro do concelho da prova, por isso é aproximada."+(filtroRaio&&semLocal?" "+semLocal+(semLocal===1?" prova sem local conhecido fica":" provas sem local conhecido ficam")+" de fora.":"")]:["Escolhe a tua localização ou o teu concelho para filtrar por distância. Fica só neste telemóvel."]));
   if(!$("concelhosList").options.length)$("concelhosList").replaceChildren(...LUG.c.map(c=>h("option",{value:c[4]+" ("+c[1]+")"})));
-  const nExtra=(filtroRaio&&casa?1:0)+(filtroTipos.size?1:0);$("maisBtn").textContent=nExtra?"Mais filtros ("+nExtra+")":"Mais filtros";
+  $("maisBtn").textContent=filtroRaio&&casa?"Distância de casa: até "+filtroRaio+" km":"Distância de casa";
   const todas=fut.filter(p=>naReg(p)&&(!filtroRaio||!casa||(kmAte(p)!=null&&kmAte(p)<=filtroRaio))&&(!filtroTipos.size||tiposDe(p).some(t=>filtroTipos.has(t)))&&(!fd||p.distrito===fd)&&(!fm||p.data.slice(0,7)===fm)&&(!q||[p.nome,p.concelho,p.distrito].join(" ").toLowerCase().includes(q)));
   listaPorMes(todas,$("todasList"),fut.length?"Nenhuma prova com estes filtros.":"Ainda não há provas.");
   fillSel($("fMes"),"Todos os meses",[...new Set(fut.map(p=>p.data.slice(0,7)))].sort().map(m=>[m,MESES[+m.slice(5)-1]+" "+m.slice(0,4)]));

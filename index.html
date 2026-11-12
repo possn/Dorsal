@@ -74,23 +74,20 @@
 
     <section id="view-todas" hidden>
       <div class="regioes" id="regioes" role="group" aria-label="Região"></div>
+      <div class="regioes tiposbar" id="tipos" role="group" aria-label="Tipo de percurso"></div>
+      <p class="hint" id="tiposTxt"></p>
       <div class="tools">
         <input class="q" id="q" type="search" placeholder="Procurar prova ou terra" aria-label="Procurar">
         <select id="fDistrito" aria-label="Distrito"><option value="">Todos os distritos</option></select>
         <select id="fMes" aria-label="Mês"><option value="">Todos os meses</option></select>
       </div>
-      <button class="btn small" id="maisBtn" type="button" aria-expanded="false" aria-controls="maisFiltros">Mais filtros</button>
+      <button class="btn small" id="maisBtn" type="button" aria-expanded="false" aria-controls="maisFiltros">Distância de casa</button>
       <div id="maisFiltros" class="mais" hidden>
         <div class="mf-bloco">
           <strong>Distância de casa</strong>
           <div class="inline"><button class="btn small" id="geoBtn" type="button">Usar a minha localização</button><input id="casaIn" list="concelhosList" autocomplete="off" placeholder="ou escreve o teu concelho" aria-label="O teu concelho"></div>
           <p class="hint" id="casaTxt"></p>
           <div class="chips" id="raios" role="group" aria-label="Raio"></div>
-        </div>
-        <div class="mf-bloco">
-          <strong>Tipo de percurso</strong>
-          <div class="chips" id="tipos" role="group" aria-label="Tipo de percurso"></div>
-          <p class="hint" id="tiposTxt"></p>
         </div>
       </div>
       <datalist id="concelhosList"></datalist>
