@@ -161,16 +161,14 @@ function card(p){const d=parseD(p.data),q=quem(p.id);
     insc?h("a",{href:insc,target:"_blank",rel:"noopener",onclick:()=>cliqueInsc(p.id),text:"Inscrição ↗"}):h("span",{class:"hint",text:"Sem link de inscrição"}),
     info?h("a",{href:info,target:"_blank",rel:"noopener",text:"Informação ↗"}):null,
     h("button",{class:"linkbtn",onclick:()=>abrir(p.id),text:ONLINE&&grupo?"Quem vai"+(temGente(p.id)?" ("+contagem(q)+")":""):"Abrir prova"}),
-    h("button",{class:"linkbtn",onclick:()=>{openMsg=openMsg===p.id?null:p.id;draw()},text:openMsg===p.id?"Fechar mensagem":"Mensagem para o grupo"}),
     (podeMarcar()&&p.grupo&&p.grupo===grupo)?h("button",{class:"linkbtn",onclick:()=>remover(p.id),text:confirmDel===p.id?"Confirmar remoção":"Remover"}):null);
-  const msg=msgDe(p);
-  const n=cliques[p.id]||0;
+  const n=cliques[p.id]||0,dias=Math.round((d-hoje())/864e5);
   return h("article",{class:"card"},
-    h("div",{class:"bib","aria-label":dataLonga(p.data)},h("div",{class:"d",text:d.getDate()}),h("div",{class:"m",text:MESES[d.getMonth()].slice(0,3)}),h("div",{class:"w",text:DIAS[d.getDay()]})),
+    h("div",{class:"bib",role:"button",tabindex:"0","aria-label":dataLonga(p.data)+". Abrir "+p.nome,onclick:()=>abrir(p.id)},h("div",{class:"d",text:d.getDate()}),h("div",{class:"m",text:MESES[d.getMonth()].slice(0,3)}),h("div",{class:"w",text:DIAS[d.getDay()]})),
     h("div",{class:"info"},h("h3",null,h("button",{class:"titlebtn",onclick:()=>abrir(p.id),text:p.nome})),
-      h("div",{class:"meta"},h("strong",{text:[p.concelho,p.distrito].filter(Boolean).join(", ")||"Local por confirmar"}),"  ·  "+faltam(p.data)+(kmAte(p)!=null?"  ·  ≈ "+Math.round(kmAte(p))+" km de casa":"")+(p.nota?"  ·  "+p.nota:"")),
+      h("div",{class:"meta"},h("strong",{text:[p.concelho,p.distrito].filter(Boolean).join(", ")||"Local por confirmar"}),"  ·  ",h("span",{class:dias<=7?"cd urg":"cd",text:faltam(p.data)}),(kmAte(p)!=null?"  ·  ≈ "+Math.round(kmAte(p))+" km de casa":"")+(p.nota?"  ·  "+p.nota:"")),
       p.distancias?h("div",{class:"dist"},...String(p.distancias).split(",").map(s=>s.trim()).filter(Boolean).map(s=>h("span",{text:s}))):null,
-      people.childNodes.length?people:null,seg,links,msg,
+      people.childNodes.length?people:null,seg,links,
       n?h("div",{class:"owner",text:n+(n===1?" clique":" cliques")+" do grupo no link de inscrição"}):null))}
 function detalhe(pid){const box=$("view-prova");box.replaceChildren();
   const voltar=h("button",{class:"back",onclick:fechar,text:"← Provas"});
@@ -234,10 +232,11 @@ function draw(){
   $("partilhar").hidden=!(ONLINE&&grupo);$("sair").hidden=!me;$("editarBtn").hidden=!podeMarcar();
   const aberta=provaAberta();
   $("lista").hidden=!!aberta;$("view-prova").hidden=!aberta;
-  for(const t of ["grupo","todas","nova"]){$("tab-"+t).setAttribute("aria-selected",String(tab===t));$("view-"+t).hidden=tab!==t}
+  for(const t of ["grupo","todas","nova"]){$("tab-"+t).setAttribute("aria-current",(!sec&&!aberta&&tab===t)?"page":"false");$("view-"+t).hidden=tab!==t}
+  $("pgTitle").textContent=tab==="grupo"?"O grupo vai":tab==="todas"?"Provas":"Nova prova";$("resumoBtn").hidden=tab!=="grupo";if(tab!=="grupo")$("resumo").hidden=true;$("pgHead").hidden=!!aberta;
   if(aberta)detalhe(aberta);
   const fut=futuras();const grp=fut.filter(p=>temGente(p.id));
-  $("nGrupo").textContent=loaded?grp.length:"";$("nTodas").textContent=loaded?fut.length:"";
+  $("nGrupo").textContent=loaded&&grp.length?grp.length:"";$("nTodas").textContent="";
   if(!loaded){$("view-grupo").replaceChildren(h("div",{class:"empty",text:"A carregar as provas…"}));return}
   const minhas=me?fut.filter(p=>pres[p.id]&&(pres[p.id][me]==="inscrito"||pres[p.id][me]==="vou")):[];
   const banner=minhas.length?(()=>{const p=minhas[0],e=pres[p.id][me],x=exDe(p.id,me);return h("button",{type:"button",class:"proxima",onclick:()=>abrir(p.id)},
@@ -263,7 +262,7 @@ function draw(){
   $("casaTxt").replaceChildren(...(casa?["Casa: ",h("strong",{text:casa.nome}),". ",h("button",{type:"button",class:"linkbtn",onclick:()=>{definirCasa(null);filtroRaio=0;store.set("dorsal.raio",null);draw()},text:"Esquecer"}),
     " Distância em linha recta até ao centro do concelho da prova, por isso é aproximada."+(filtroRaio&&semLocal?" "+semLocal+(semLocal===1?" prova sem local conhecido fica":" provas sem local conhecido ficam")+" de fora.":"")]:["Escolhe a tua localização ou o teu concelho para filtrar por distância. Fica só neste telemóvel."]));
   if(!$("concelhosList").options.length)$("concelhosList").replaceChildren(...LUG.c.map(c=>h("option",{value:c[4]+" ("+c[1]+")"})));
-  $("maisBtn").textContent=filtroRaio&&casa?"Distância de casa: até "+filtroRaio+" km":"Distância de casa";
+  {const nf=(filtroRaio&&casa?1:0)+($("fDistrito").value?1:0)+($("fMes").value?1:0);$("maisBtn").textContent=nf?"Filtros ("+nf+")":"Filtros";$("maisBtn").classList.toggle("on",!!nf)}
   const todas=fut.filter(p=>naReg(p)&&(!filtroRaio||!casa||(kmAte(p)!=null&&kmAte(p)<=filtroRaio))&&(!filtroTipos.size||tiposDe(p).some(t=>filtroTipos.has(t)))&&(!fd||p.distrito===fd)&&(!fm||p.data.slice(0,7)===fm)&&(!q||[p.nome,p.concelho,p.distrito].join(" ").toLowerCase().includes(q)));
   listaPorMes(todas,$("todasList"),fut.length?"Nenhuma prova com estes filtros.":"Ainda não há provas.");
   fillSel($("fMes"),"Todos os meses",[...new Set(fut.map(p=>p.data.slice(0,7)))].sort().map(m=>[m,MESES[+m.slice(5)-1]+" "+m.slice(0,4)]));
@@ -337,7 +336,8 @@ $("scrim").addEventListener("click",()=>abrirMenu(false));
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("menu").hidden)abrirMenu(false)});
 
 // ---------- eventos ----------
-document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{tab=b.dataset.tab;store.set("dorsal.tab",tab);draw()}));
+document.querySelectorAll(".tab[data-tab]").forEach(b=>b.addEventListener("click",()=>{tab=b.dataset.tab;store.set("dorsal.tab",tab);if(location.hash)history.pushState(null,"",location.pathname);draw();window.scrollTo({top:0})}));
+$("tab-menu").addEventListener("click",()=>abrirMenu(true));
 ["q","fMes"].forEach(id=>$(id).addEventListener("input",draw));
 $("maisBtn").addEventListener("click",()=>{const m=$("maisFiltros");m.hidden=!m.hidden;$("maisBtn").setAttribute("aria-expanded",String(!m.hidden))});
 $("geoBtn").addEventListener("click",()=>{if(!navigator.geolocation){toast("Este telemóvel não dá a localização.");return}$("geoBtn").disabled=true;$("geoBtn").textContent="A localizar…";
