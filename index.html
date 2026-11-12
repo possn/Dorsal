@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="app.css?v=31">
+<link rel="stylesheet" href="app.css?v=32">
 </head>
 <body>
 <div class="topbar"><div class="wrap brand"><button class="menu-btn" id="menuBtn" aria-label="Abrir menu" aria-expanded="false" aria-controls="menu"><span></span><span></span><span></span></button><img src="icons/dorsal-v2.svg" alt="" width="34" height="34"><span>Dorsal</span><button class="me-btn" id="meBtn" hidden></button></div></div>
@@ -116,6 +116,7 @@
         <label class="full" for="nNome"><span id="nNomeL">Nome da prova</span><input id="nNome" required maxlength="120"></label>
         <label for="nData">Data<input id="nData" type="date" required></label>
         <label for="nHora" class="sotreino" hidden>Hora<input id="nHora" type="time"></label>
+        <label class="sotreino" for="nRep" hidden>Repetir<select id="nRep"><option value="1">Só este dia</option><option value="4">Todas as semanas, 4 semanas</option><option value="8">Todas as semanas, 8 semanas</option><option value="12">Todas as semanas, 12 semanas</option></select></label>
         <label class="full sotreino" for="nPonto" hidden>Ponto de encontro<input id="nPonto" maxlength="120" placeholder="Por exemplo: parque de estacionamento da Peninha"></label>
         <label for="nDistrito">Distrito<select id="nDistrito"></select></label>
         <label for="nConcelho">Concelho ou terra<input id="nConcelho" maxlength="80"></label>
@@ -161,10 +162,10 @@
   <button class="tab" id="tab-menu" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span>Mais</span></button>
 </nav>
 <div class="toast" id="toast" hidden></div>
-<script src="config.js?v=31"></script>
-<script src="conteudos.js?v=31"></script>
-<script src="lugares.js?v=31"></script>
-<script src="gpx.js?v=31"></script>
-<script src="app.js?v=31"></script>
+<script src="config.js?v=32"></script>
+<script src="conteudos.js?v=32"></script>
+<script src="lugares.js?v=32"></script>
+<script src="gpx.js?v=32"></script>
+<script src="app.js?v=32"></script>
 </body>
 </html>

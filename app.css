@@ -449,3 +449,17 @@ details.fontes[open] summary strong::before{content:"▾ "}
 .ptr.feito .ptr-ic{border-color:#2e6b43;background:#2e6b43}
 @keyframes girar{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.ptr.a-carregar .ptr-ic{animation:none}}
+/* objetivo anual */
+.objetivo{display:flex;align-items:center;gap:14px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.anelbox{position:relative;width:76px;height:76px;flex:none}
+.anel{width:76px;height:76px;transform:rotate(-90deg)}
+.anel circle{fill:none;stroke-width:9}
+.anel .fundo{stroke:var(--chip)}
+.anel .prog{stroke:var(--accent);stroke-linecap:round;transition:stroke-dasharray .6s}
+.anel .marca{stroke:var(--fg);stroke-width:2.5;stroke-linecap:round;opacity:.55}
+.anelbox .pct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.05rem}
+.objtxt{display:flex;flex-direction:column;gap:2px;align-items:flex-start}
+.objform{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px}
+.objform label{display:flex;flex-direction:column;gap:4px;font-weight:600;font-size:.9rem}
+.objform input{width:120px}
+.meuano.vazio{padding:8px 14px}.meuano.vazio .objetivo{margin:0;padding:0;border:0}

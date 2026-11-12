@@ -258,3 +258,8 @@ grant execute on function public.apagar_membro(uuid) to anon, authenticated;
 -- Um treino é uma linha em provas com fonte = 'treino', grupo preenchido, hora (HH:MM) e nota = ponto de encontro.
 alter table public.provas add column if not exists hora text;
 -- alter table public.provas add constraint provas_hora_fmt check (hora is null or hora ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$');
+
+-- ---------- objetivo anual de km ----------
+alter table public.membros add column if not exists objetivo_km int check (objetivo_km is null or (objetivo_km between 1 and 20000));
+grant update (objetivo_km) on public.membros to anon, authenticated;
+-- create policy membros_objetivo on public.membros for update to anon, authenticated using (grupo = public.grupo_atual()) with check (grupo = public.grupo_atual());
