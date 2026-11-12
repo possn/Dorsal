@@ -259,9 +259,9 @@ let novoLogo=null;
 function reduzirImagem(file){return new Promise((res,rej)=>{const img=new Image(),url=URL.createObjectURL(file);img.onload=()=>{const S=128,c=document.createElement("canvas");c.width=c.height=S;const x=c.getContext("2d");
   const lado=Math.min(img.width,img.height);x.drawImage(img,(img.width-lado)/2,(img.height-lado)/2,lado,lado,0,0,S,S);URL.revokeObjectURL(url);
   let d=c.toDataURL("image/webp",.8);if(!d.startsWith("data:image/webp"))d=c.toDataURL("image/jpeg",.82);res(d)};img.onerror=rej;img.src=url})}
-$("editarBtn").addEventListener("click",()=>{const p=$("editarGrupo");p.hidden=!p.hidden;if(!p.hidden){$("gNome").value=grupoNome;novoLogo=null;$("gPrev").src=grupoLogo||"icons/favicon.svg";$("gMsg").textContent="";p.scrollIntoView({behavior:"smooth",block:"center"})}});
+$("editarBtn").addEventListener("click",()=>{const p=$("editarGrupo");p.hidden=!p.hidden;if(!p.hidden){$("gNome").value=grupoNome;novoLogo=null;$("gPrev").src=grupoLogo||"icons/dorsal-v2.svg";$("gMsg").textContent="";p.scrollIntoView({behavior:"smooth",block:"center"})}});
 $("gFicheiro").addEventListener("change",async e=>{const f=e.target.files[0];if(!f)return;try{novoLogo=await reduzirImagem(f);$("gPrev").src=novoLogo}catch(_){$("gMsg").textContent="Não consegui ler essa imagem."}});
-$("gTirar").addEventListener("click",()=>{novoLogo="";$("gPrev").src="icons/favicon.svg"});
+$("gTirar").addEventListener("click",()=>{novoLogo="";$("gPrev").src="icons/dorsal-v2.svg"});
 $("gForm").addEventListener("submit",async e=>{e.preventDefault();if(!podeMarcar())return;const nome=$("gNome").value.trim().slice(0,40);if(!nome){$("gMsg").textContent="O grupo precisa de um nome.";return}
   const body={nome};if(novoLogo!==null)body.logo=novoLogo;
   try{await api("grupos?codigo=eq."+grupo,{method:"PATCH",prefer:"return=minimal",body});grupoNome=nome;if(novoLogo!==null)grupoLogo=novoLogo;$("editarGrupo").hidden=true;draw();toast("Grupo actualizado")}

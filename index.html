@@ -6,9 +6,9 @@
 <title>Dorsal</title>
 <meta name="description" content="Quem do grupo vai a que prova de trail, com o link de inscrição à mão.">
 <meta name="theme-color" content="#17211B">
-<link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest?v=2">
+<link rel="icon" href="icons/dorsal-v2.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon-v2.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Dorsal">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -17,7 +17,7 @@
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
-<div class="topbar"><div class="wrap brand"><button class="menu-btn" id="menuBtn" aria-label="Abrir menu" aria-expanded="false" aria-controls="menu"><span></span><span></span><span></span></button><img src="icons/favicon.svg" alt="" width="34" height="34"><span>Dorsal</span><button class="me-btn" id="meBtn" hidden></button></div></div>
+<div class="topbar"><div class="wrap brand"><button class="menu-btn" id="menuBtn" aria-label="Abrir menu" aria-expanded="false" aria-controls="menu"><span></span><span></span><span></span></button><img src="icons/dorsal-v2.svg" alt="" width="34" height="34"><span>Dorsal</span><button class="me-btn" id="meBtn" hidden></button></div></div>
 <div class="ribbon" aria-hidden="true"></div>
 <div class="scrim" id="scrim" hidden></div>
 <nav class="drawer" id="menu" aria-label="Secções" hidden>
@@ -104,7 +104,7 @@
   <section id="editarGrupo" class="panel" hidden>
     <h2>O vosso grupo</h2>
     <form id="gForm" class="form gform">
-      <div class="full row"><img id="gPrev" class="gprev" src="icons/favicon.svg" alt="Logótipo do grupo" width="72" height="72">
+      <div class="full row"><img id="gPrev" class="gprev" src="icons/dorsal-v2.svg" alt="Logótipo do grupo" width="72" height="72">
         <div class="row"><label class="btn small" for="gFicheiro">Escolher imagem</label><input id="gFicheiro" type="file" accept="image/*" class="vh"><button type="button" class="linkbtn" id="gTirar">Tirar logótipo</button></div></div>
       <label class="full" for="gNome">Nome do grupo<input id="gNome" maxlength="40" required></label>
       <div class="full row"><button class="btn primary" type="submit">Guardar</button><span class="hint" id="gMsg"></span></div>
