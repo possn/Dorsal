@@ -159,7 +159,7 @@ function draw(){
   $("entrar").hidden=!(ONLINE&&!grupo);
   $("quem").hidden=!(ONLINE&&grupo&&loaded&&!me);
   if(!$("quem").hidden){$("nomes").replaceChildren(...Object.entries(membros).sort((a,b)=>a[1].localeCompare(b[1],"pt")).map(([id,n])=>h("button",{type:"button",onclick:()=>{me=id;store.set(chaveMe(),id);draw()},text:n})))}
-  $("meBtn").hidden=!me;$("meBtn").textContent=me?(grupoNome?grupoNome+" · ":"")+nomeDe(me):"";
+  $("meBtn").hidden=!me;$("meBtn").textContent=me?nomeDe(me):"";
   $("partilhar").hidden=!(ONLINE&&grupo);$("sair").hidden=!me;
   const aberta=provaAberta();
   $("lista").hidden=!!aberta;$("view-prova").hidden=!aberta;
@@ -251,7 +251,7 @@ $("novoForm").addEventListener("submit",async e=>{e.preventDefault();const nome=
   catch(err){toast("Não foi possível juntar-te. Tenta outra vez.")}});
 $("meBtn").addEventListener("click",()=>{tab="grupo";draw();window.scrollTo({top:0,behavior:"smooth"})});
 $("sair").addEventListener("click",()=>{me=null;store.set(chaveMe(),null);draw();window.scrollTo({top:0})});
-$("partilhar").addEventListener("click",()=>{const link=location.origin+location.pathname+"?g="+grupo;copiar("Junta-te ao grupo"+(grupoNome?" "+grupoNome:"")+" no Dorsal para combinarmos as provas de trail: "+link,null)});
+$("partilhar").addEventListener("click",()=>{const link=location.origin+location.pathname+"?g="+grupo;copiar("Junta-te aos "+(grupoNome||"Malte Runners")+" para combinarmos as provas de trail: "+link,null)});
 $("nDistrito").replaceChildren(h("option",{value:"",text:"Escolher"}),...DISTRITOS.map(d=>h("option",{value:d,text:d})));
 $("novaForm").addEventListener("submit",async e=>{e.preventDefault();if(!podeMarcar())return;
   const nome=$("nNome").value.trim(),data=$("nData").value;if(!nome||!data)return;

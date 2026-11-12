@@ -1,13 +1,13 @@
 {
-  "name": "Dorsal",
-  "short_name": "Dorsal",
-  "description": "Quem do grupo vai a que prova de trail, com o link de inscrição à mão.",
+  "name": "Malte Runners",
+  "short_name": "Malte Runners",
+  "description": "App dos Malte Runners: provas de trail, quem vai, e tudo sobre trail.",
   "lang": "pt-PT",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#eef1ec",
-  "theme_color": "#17211B",
+  "background_color": "#f3efe6",
+  "theme_color": "#1f3446",
   "icons": [
     {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
     {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
