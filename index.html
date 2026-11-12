@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="app.css?v=25">
+<link rel="stylesheet" href="app.css?v=26">
 </head>
 <body>
 <div class="topbar"><div class="wrap brand"><button class="menu-btn" id="menuBtn" aria-label="Abrir menu" aria-expanded="false" aria-controls="menu"><span></span><span></span><span></span></button><img src="icons/dorsal-v2.svg" alt="" width="34" height="34"><span>Dorsal</span><button class="me-btn" id="meBtn" hidden></button></div></div>
@@ -30,6 +30,17 @@
   <div id="pg-provas">
 
   <section id="entrar" class="panel" hidden>
+    <div id="hero" class="hero" hidden>
+      <h1>As provas do teu grupo, num só sítio.</h1>
+      <p class="lead">Trail, corrida e caminhada em Portugal. Vê quem vai a cada prova, combina boleias e guarda os teus resultados.</p>
+      <ul class="feat">
+        <li><b>📅</b><span><strong>Calendário de provas</strong> filtrado por região, tipo e distância a casa.</span></li>
+        <li><b>👥</b><span><strong>Quem vai</strong>: inscrito, vou ou talvez, percursos e boleias.</span></li>
+        <li><b>🔔</b><span><strong>Avisos</strong> de mensagens, de quem se inscreve e na véspera da prova.</span></li>
+        <li><b>📈</b><span><strong>Resultados e GPX</strong>, estatísticas, conquistas e imagem para partilhar.</span></li>
+      </ul>
+      <p class="hint">Sem conta nem email. Cria o grupo, envia o link e está feito.</p>
+    </div>
     <div class="row between"><h2>Entrar num grupo</h2><button class="linkbtn" id="entrarX" type="button" hidden>Cancelar</button></div>
     <p>Abre o link que recebeste, ou cola aqui o link ou o código do grupo.</p>
     <form id="codigoForm" class="inline">
@@ -143,10 +154,10 @@
   <button class="tab" id="tab-menu" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span>Mais</span></button>
 </nav>
 <div class="toast" id="toast" hidden></div>
-<script src="config.js?v=25"></script>
-<script src="conteudos.js?v=25"></script>
-<script src="lugares.js?v=25"></script>
-<script src="gpx.js?v=25"></script>
-<script src="app.js?v=25"></script>
+<script src="config.js?v=26"></script>
+<script src="conteudos.js?v=26"></script>
+<script src="lugares.js?v=26"></script>
+<script src="gpx.js?v=26"></script>
+<script src="app.js?v=26"></script>
 </body>
 </html>

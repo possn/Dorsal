@@ -231,3 +231,17 @@ create extension if not exists pg_cron;
 --   url:='https://gubjzbirpkwrxoreqvfm.supabase.co/functions/v1/notificar',
 --   headers:=jsonb_build_object('Content-Type','application/json','Authorization','Bearer <ANON_KEY>'),
 --   body:='{"tipo":"semana"}'::jsonb)$$);
+
+-- ---------- RGPD: apagar os dados de um membro (o próprio, a partir da app) ----------
+create or replace function public.apagar_membro(p_id uuid)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare g text := public.grupo_atual(); n int;
+begin
+  if g is null or not public.grupo_valido() then return false; end if;
+  delete from public.cliques where membro_id = p_id and grupo = g;
+  delete from public.membros where id = p_id and grupo = g;  -- presenças, mensagens, trilhos e subscrições caem em cascata
+  get diagnostics n = row_count;
+  return n > 0;
+end $$;
+revoke all on function public.apagar_membro(uuid) from public;
+grant execute on function public.apagar_membro(uuid) to anon, authenticated;

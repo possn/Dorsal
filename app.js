@@ -311,6 +311,39 @@ async function partilharResultado(p,id){const x=exDe(p.id,id);toast("A preparar 
   try{if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:p.nome});return}}catch(e){if(e&&e.name==="AbortError")return}
   const a=h("a",{href:URL.createObjectURL(blob),download:nomeF});document.body.append(a);a.click();a.remove();toast("Imagem descarregada")}
 
+// ---------- privacidade ----------
+let apagarConf="";
+async function exportarDados(){if(!grupo||!me)return;toast("A juntar os teus dados…");
+  try{const q="membro_id=eq."+me;const [pr,co,tr]=await Promise.all([api("presencas?"+q),api("comentarios?"+q),api("trilhos?"+q)]);
+    const dados={exportado_em:new Date().toISOString(),app:"Dorsal",grupo:{nome:grupoNome},membro:{id:me,nome:nomeDe(me)},presencas_e_resultados:pr,mensagens:co,trilhos_gpx:tr};
+    const blob=new Blob([JSON.stringify(dados,null,2)],{type:"application/json"});const a=h("a",{href:URL.createObjectURL(blob),download:"dorsal-os-meus-dados.json"});document.body.append(a);a.click();a.remove();toast("Ficheiro descarregado")}
+  catch(e){toast("Não foi possível exportar. Tenta outra vez.")}}
+async function apagarDados(){if(apagarConf.trim().toLowerCase()!==nomeDe(me).trim().toLowerCase()){toast("Escreve o teu nome tal como aparece no grupo.");return}
+  try{const ok=await api("rpc/apagar_membro",{method:"POST",body:{p_id:me}});if(!ok)throw 0;
+    try{desactivarPush().catch(()=>{})}catch(_){}
+    store.set(chaveMe(),null);me=null;apagarConf="";toast("Os teus dados foram apagados deste grupo");history.pushState(null,"",location.pathname+location.search);await carregar()}
+  catch(e){toast("Não foi possível apagar. Tenta outra vez.")}}
+function privacidade(){const box=h("article",{class:"sec privacidade"});
+  const it=(t,d)=>h("li",null,h("strong",{text:t}),h("span",{text:d}));
+  box.append(h("h1",{text:"Privacidade e dados"}),
+    h("p",{class:"lead",text:"O Dorsal não pede email, telefone nem palavra-passe. Não tem publicidade nem rastreadores. Cada grupo é privado e só entra quem tem o link."}),
+    h("h2",{text:"O que guardamos"}),h("ul",{class:"privlista"},
+      it("O nome que escolhes","Só o vê quem está no teu grupo."),
+      it("As tuas marcações e resultados","Inscrito, vou ou talvez, percurso, boleias, km, D+ e tempos."),
+      it("Mensagens","As que escreves na conversa de cada prova."),
+      it("Trilhos GPX","Só os que importas. Mostram por onde passaste, por isso partilha-os só com quem confias."),
+      it("Notificações","Se as activares, o endereço técnico do teu telemóvel para receber avisos. Desliga-se quando quiseres.")),
+    h("h2",{text:"Onde fica"}),h("p",{text:"Os dados ficam numa base de dados Supabase na União Europeia (Frankfurt). A app está alojada no GitHub Pages. A previsão do tempo vem da Open-Meteo e os mapas do OpenTopoMap: a estes serviços só se envia a localização da prova, nunca a tua."}),
+    h("p",{text:"Neste telemóvel ficam guardados o grupo, quem és e uma cópia das provas para funcionar sem rede. Apagas isso limpando os dados do site no browser."}),
+    h("h2",{text:"Os teus direitos"}),h("p",{text:"Ao abrigo do RGPD podes ver, levar e apagar os teus dados quando quiseres, aqui mesmo."}));
+  if(!grupo||!me){box.append(h("p",{class:"hint",text:"Entra num grupo e escolhe o teu nome para exportares ou apagares os teus dados."}));return box}
+  const inp=h("input",{placeholder:nomeDe(me),"aria-label":"Escreve o teu nome para confirmar",value:apagarConf,oninput:e=>{apagarConf=e.target.value}});
+  box.append(h("div",{class:"privacoes"},
+    h("div",{class:"calc"},h("h2",{text:"Levar os meus dados"}),h("p",{class:"hint",text:"Descarrega um ficheiro com as tuas marcações, resultados, mensagens e trilhos em "+(grupoNome||"este grupo")+"."}),h("button",{class:"btn primary",type:"button",onclick:exportarDados,text:"Exportar (JSON)"})),
+    h("div",{class:"calc perigo"},h("h2",{text:"Apagar os meus dados"}),h("p",{class:"hint",text:"Apaga o teu nome, marcações, resultados, mensagens, trilhos e notificações em "+(grupoNome||"este grupo")+". Não se pode desfazer. As provas que criaste continuam no calendário do grupo."}),
+      h("label",null,"Para confirmar, escreve "+nomeDe(me),inp),h("button",{class:"btn danger",type:"button",onclick:apagarDados,text:"Apagar tudo o que é meu"}))));
+  return box}
+
 // ---------- membros ----------
 const linkMembro=id=>"#s=membro&m="+id;
 const fmtKm=n=>fmtN(Math.round(n*10)/10);
@@ -598,7 +631,7 @@ function fillSel(sel,first,opts){const v=sel.value,key=JSON.stringify(opts);if(s
 function draw(){
   const sec=secAtual();$("pg-sec").hidden=!sec;$("pg-provas").hidden=!!sec;desenharMenu();
   if(sec)desenharSec(sec);else secDesenhada=null;
-  $("entrar").hidden=!(ONLINE&&(!grupo||entrarAberto));$("entrarX").hidden=!grupo;
+  $("entrar").hidden=!(ONLINE&&(!grupo||entrarAberto));$("hero").hidden=!!grupo;$("entrarX").hidden=!grupo;
   $("quem").hidden=!(ONLINE&&grupo&&loaded&&!me);
   if(!$("quem").hidden){$("nomes").replaceChildren(...Object.entries(membros).sort((a,b)=>a[1].localeCompare(b[1],"pt")).map(([id,n])=>h("button",{type:"button",onclick:()=>{me=id;store.set(chaveMe(),id);draw()},text:n})))}
   $("meBtn").hidden=!me;
@@ -659,7 +692,7 @@ function draw(){
 
 // ---------- secções (menu lateral) ----------
 const SECOES=window.DORSAL_SECOES||[];
-function secAtual(){const m=location.hash.match(/[#&]s=([a-z-]+)/);return m&&(m[1]==="estatisticas"||m[1]==="membros"||m[1]==="membro"||SECOES.some(x=>x.id===m[1]))?m[1]:null}
+function secAtual(){const m=location.hash.match(/[#&]s=([a-z-]+)/);return m&&(m[1]==="estatisticas"||m[1]==="membros"||m[1]==="membro"||m[1]==="privacidade"||SECOES.some(x=>x.id===m[1]))?m[1]:null}
 let secDesenhada=null;
 function comRefs(texto,sid){const out=[];let i=0;String(texto).replace(/\[(\d+)\]/g,(m,n,pos)=>{out.push(texto.slice(i,pos));
   out.push(h("sup",null,h("a",{href:"#",onclick:e=>{e.preventDefault();const f=document.getElementById("f-"+sid+"-"+n);if(f)f.scrollIntoView({behavior:"smooth",block:"center"})},"aria-label":"Fonte "+n,text:"["+n+"]"})));i=pos+m.length;return m});
@@ -706,6 +739,7 @@ function bloco(b,sid){switch(b.t){
   case "calc-abast":return calcAbast(sid);
   default:return null}}
 function desenharSec(sid){if(sid==="estatisticas"){secDesenhada=null;$("pg-sec").replaceChildren(estatisticas());return}
+  if(sid==="privacidade"){secDesenhada=null;$("pg-sec").replaceChildren(privacidade());return}
   if(sid==="membros"){secDesenhada=null;$("pg-sec").replaceChildren(membrosView());return}
   if(sid==="membro"){secDesenhada=null;const m=location.hash.match(/[#&]m=([0-9a-z-]{1,40})/i);$("pg-sec").replaceChildren(perfil(m?m[1]:me));return}if(secDesenhada===sid)return;secDesenhada=sid;const S=SECOES.find(x=>x.id===sid);const box=$("pg-sec");
   box.replaceChildren(h("article",{class:"sec"},h("h1",{text:S.titulo}),h("p",{class:"lead",text:S.resumo}),...S.blocos.map(b=>bloco(b,sid)),
@@ -718,7 +752,8 @@ function desenharMenu(){const cur=secAtual()||"provas";
       ...gruposConhecidos().map(g=>h("li",null,h("a",{href:"#",onclick:e=>{e.preventDefault();abrirMenu(false);history.pushState(null,"",location.pathname);if(g.c!==grupo)mudarGrupo(g.c);else draw()},"aria-current":g.c===grupo?"true":null},h("span",{class:"ic",text:g.c===grupo?"●":"○"}),g.n||"Grupo sem nome"))),
       h("li",null,h("a",{href:"#",onclick:e=>{e.preventDefault();abrirMenu(false);history.pushState(null,"",location.pathname);entrarAberto=true;draw();window.scrollTo({top:0});$("criarNome").focus()}},h("span",{class:"ic",text:"+"}),"Criar ou entrar noutro grupo"))]:[]),
     h("li",{class:"sep"}),
-    ...SECOES.map(x=>h("li",null,h("a",{href:"#s="+x.id,onclick:()=>abrirMenu(false),"aria-current":cur===x.id?"page":null},h("span",{class:"ic",text:x.icone}),x.titulo))))}
+    ...SECOES.map(x=>h("li",null,h("a",{href:"#s="+x.id,onclick:()=>abrirMenu(false),"aria-current":cur===x.id?"page":null},h("span",{class:"ic",text:x.icone}),x.titulo))),
+    h("li",{class:"sep"}),h("li",null,h("a",{href:"#s=privacidade",onclick:()=>abrirMenu(false),"aria-current":cur==="privacidade"?"page":null},h("span",{class:"ic",text:"⚿"}),"Privacidade e dados")))}
 $("menuBtn").addEventListener("click",()=>abrirMenu(true));
 $("menuX").addEventListener("click",()=>abrirMenu(false));
 $("scrim").addEventListener("click",()=>abrirMenu(false));
