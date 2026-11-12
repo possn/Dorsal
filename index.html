@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Dorsal</title>
+<meta name="description" content="Quem do grupo vai a que prova de trail, com o link de inscrição à mão.">
+<meta name="theme-color" content="#17211B">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Dorsal">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="topbar"><div class="wrap brand"><img src="icons/favicon.svg" alt="" width="34" height="34"><span>Dorsal</span><button class="me-btn" id="meBtn" hidden></button></div></div>
+<div class="ribbon" aria-hidden="true"></div>
+<main class="wrap">
+  <p class="sub">Quem do grupo vai a que prova, com o link de inscrição à mão.</p>
+
+  <section id="entrar" class="panel" hidden>
+    <h2>Entrar no grupo</h2>
+    <p>Abre o link que recebeste no WhatsApp, ou cola aqui o link ou o código do grupo.</p>
+    <form id="codigoForm" class="inline">
+      <input id="codigo" autocomplete="off" placeholder="Link ou código do grupo" aria-label="Link ou código do grupo">
+      <button class="btn primary" type="submit">Entrar</button>
+    </form>
+    <p class="hint" id="codigoMsg"></p>
+  </section>
+
+  <section id="quem" class="panel" hidden>
+    <h2>Quem és tu?</h2>
+    <p>Escolhe o teu nome. O telemóvel lembra-se para a próxima.</p>
+    <div class="names" id="nomes"></div>
+    <form id="novoForm" class="inline">
+      <input id="novoNome" maxlength="30" placeholder="Não estou na lista: o meu nome" aria-label="O teu nome">
+      <button class="btn primary" type="submit">Juntar-me</button>
+    </form>
+  </section>
+
+  <div id="status" class="notice" hidden><p id="statusText"></p></div>
+
+  <div id="app">
+    <div class="row between">
+      <nav class="tabs" role="tablist" aria-label="Vistas">
+        <button class="tab" role="tab" id="tab-grupo" data-tab="grupo">O grupo vai <span class="n" id="nGrupo"></span></button>
+        <button class="tab" role="tab" id="tab-todas" data-tab="todas">Todas <span class="n" id="nTodas"></span></button>
+        <button class="tab" role="tab" id="tab-nova" data-tab="nova">Acrescentar</button>
+      </nav>
+      <button class="btn small" id="resumoBtn">Resumo para o WhatsApp</button>
+    </div>
+
+    <section id="resumo" class="msg" hidden>
+      <p class="hint">Provas das próximas 6 semanas em que alguém do grupo marcou presença.</p>
+      <textarea id="resumoText" readonly aria-label="Resumo para o WhatsApp"></textarea>
+      <div class="row"><button class="btn primary small" id="resumoCopy">Copiar</button><a class="btn small" id="resumoWa" target="_blank" rel="noopener">Abrir no WhatsApp</a></div>
+    </section>
+
+    <section id="view-grupo"></section>
+
+    <section id="view-todas" hidden>
+      <div class="tools">
+        <input class="q" id="q" type="search" placeholder="Procurar prova ou terra" aria-label="Procurar">
+        <select id="fDistrito" aria-label="Distrito"><option value="">Todos os distritos</option></select>
+        <select id="fMes" aria-label="Mês"><option value="">Todos os meses</option></select>
+      </div>
+      <div id="todasList"></div>
+    </section>
+
+    <section id="view-nova" hidden>
+      <form class="form" id="novaForm">
+        <label class="full" for="nNome">Nome da prova<input id="nNome" required maxlength="120"></label>
+        <label for="nData">Data<input id="nData" type="date" required></label>
+        <label for="nDistrito">Distrito<select id="nDistrito"></select></label>
+        <label for="nConcelho">Concelho ou terra<input id="nConcelho" maxlength="80"></label>
+        <label for="nDist">Distâncias <span class="hint">por exemplo 12K, 25K, caminhada 8K</span><input id="nDist" maxlength="120"></label>
+        <label class="full" for="nInsc">Link de inscrição<input id="nInsc" type="url" placeholder="https://"></label>
+        <label class="full" for="nInfo">Link com mais informação<input id="nInfo" type="url" placeholder="https://"></label>
+        <div class="full row"><button class="btn primary" type="submit">Acrescentar prova</button><span class="hint" id="novaMsg"></span></div>
+      </form>
+    </section>
+  </div>
+
+  <footer class="foot">
+    <button class="linkbtn" id="partilhar">Convidar alguém para o grupo</button>
+    <button class="linkbtn" id="sair">Mudar de pessoa</button>
+  </footer>
+</main>
+<div class="toast" id="toast" hidden></div>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

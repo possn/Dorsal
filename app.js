@@ -1,0 +1,165 @@
+(function(){
+"use strict";
+const CFG=window.DORSAL_CONFIG||{};
+const ONLINE=!!(CFG.supabaseUrl&&CFG.supabaseAnonKey);
+const DISTRITOS=["Aveiro","Beja","Braga","Bragança","Castelo Branco","Coimbra","Évora","Faro","Guarda","Leiria","Lisboa","Portalegre","Porto","Santarém","Setúbal","Viana do Castelo","Vila Real","Viseu","Açores","Madeira"];
+const MESES=["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+const DIAS=["domingo","segunda","terça","quarta","quinta","sexta","sábado"];
+const ESTADOS=[["inscrito","Inscrito"],["vou","Vou"],["talvez","Talvez"]];
+const $=id=>document.getElementById(id);
+function h(tag,attrs,...kids){const el=document.createElement(tag);if(attrs)for(const[k,v]of Object.entries(attrs)){if(v==null||v===false)continue;if(k==="class")el.className=v;else if(k==="text")el.textContent=v;else if(k.startsWith("on"))el.addEventListener(k.slice(2),v);else el.setAttribute(k,v===true?"":v)}for(const c of kids.flat()){if(c==null||c===false)continue;el.append(c.nodeType?c:document.createTextNode(String(c)))}return el}
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{v==null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}}};
+
+// ---------- estado ----------
+let grupo=null,grupoNome="",me=null;
+let provas=[],membros={},pres={},cliques={},loaded=false;
+let tab=store.get("dorsal.tab")||"grupo",openMsg=null,confirmDel=null;
+
+// ---------- código do grupo ----------
+function lerCodigo(txt){const t=String(txt||"").trim();const m=t.match(/[?&#]g=([a-z0-9]{6,40})/i);if(m)return m[1].toLowerCase();if(/^[a-z0-9]{6,40}$/i.test(t))return t.toLowerCase();return null}
+(function(){const c=lerCodigo(location.search)||lerCodigo(location.hash);if(c)store.set("dorsal.grupo",c);grupo=store.get("dorsal.grupo")})();
+function chaveMe(){return "dorsal.membro."+grupo}
+
+// ---------- servidor ----------
+async function api(path,opt={}){
+  const headers={apikey:CFG.supabaseAnonKey,Authorization:"Bearer "+CFG.supabaseAnonKey,"x-grupo":grupo||"","Content-Type":"application/json"};
+  if(opt.prefer)headers.Prefer=opt.prefer;
+  const r=await fetch(CFG.supabaseUrl.replace(/\/$/,"")+"/rest/v1/"+path,{method:opt.method||"GET",headers,body:opt.body?JSON.stringify(opt.body):undefined});
+  if(!r.ok){const e=new Error("api "+r.status);e.status=r.status;try{e.detail=await r.json()}catch(_){}throw e}
+  return r.status===204?null:r.json().catch(()=>null);
+}
+const hojeISO=()=>{const t=new Date();return t.getFullYear()+"-"+String(t.getMonth()+1).padStart(2,"0")+"-"+String(t.getDate()).padStart(2,"0")};
+
+async function carregar(){
+  if(!ONLINE){
+    try{provas=await (await fetch("provas.json",{cache:"no-cache"})).json()}catch(e){provas=[]}
+    loaded=true;status("A partilha de presenças ainda não está ligada. Por agora só se vê o calendário.");draw();return;
+  }
+  try{
+    const hoje=hojeISO();
+    const reqs=[api("provas?select=*&data=gte."+hoje+"&order=data.asc,nome.asc")];
+    if(grupo)reqs.push(api("grupos?select=nome&codigo=eq."+grupo),api("membros?select=id,nome&order=nome.asc"),api("presencas?select=membro_id,prova_id,estado"),api("cliques?select=prova_id"));
+    const [ps,gs,ms,pr,cl]=await Promise.all(reqs);
+    provas=ps||[];
+    if(grupo){
+      if(!gs||!gs.length){status("Esse código de grupo não existe. Confirma o link que recebeste.");store.set("dorsal.grupo",null);grupo=null;membros={};pres={};}
+      else{grupoNome=gs[0].nome||"";membros={};for(const m of ms||[])membros[m.id]=m.nome;
+        pres={};for(const x of pr||[])(pres[x.prova_id]=pres[x.prova_id]||{})[x.membro_id]=x.estado;
+        cliques={};for(const c of cl||[])cliques[c.prova_id]=(cliques[c.prova_id]||0)+1;
+        me=store.get(chaveMe());if(me&&!membros[me]){me=null;store.set(chaveMe(),null)}
+        if($("statusText").textContent.startsWith("Sem ligação"))status("");}
+    }
+    store.set("dorsal.cache",JSON.stringify({provas,membros,pres,grupoNome}));
+  }catch(e){
+    const c=store.get("dorsal.cache");if(c){try{const o=JSON.parse(c);provas=o.provas||[];membros=o.membros||{};pres=o.pres||{};grupoNome=o.grupoNome||""}catch(_){}}
+    else{try{provas=await (await fetch("provas.json")).json()}catch(_){}}
+    status("Sem ligação ao servidor. Estás a ver a última versão guardada.");
+  }
+  loaded=true;draw();
+}
+
+// ---------- utilitários ----------
+function parseD(s){const[y,m,d]=String(s).split("-").map(Number);return new Date(y,m-1,d)}
+function hoje(){const t=new Date();return new Date(t.getFullYear(),t.getMonth(),t.getDate())}
+function faltam(s){const n=Math.round((parseD(s)-hoje())/864e5);return n===0?"é hoje":n===1?"é amanhã":"faltam "+n+" dias"}
+function dataLonga(s){const d=parseD(s);return DIAS[d.getDay()]+", "+d.getDate()+" de "+MESES[d.getMonth()]}
+function valid(u){return typeof u==="string"&&/^https?:\/\//i.test(u)?u:null}
+function nomeDe(id){return membros[id]||"Alguém"}
+function quem(pid){const out={inscrito:[],vou:[],talvez:[]};const m=pres[pid]||{};for(const[id,e]of Object.entries(m))if(out[e])out[e].push(id);for(const k in out)out[k].sort((a,b)=>nomeDe(a).localeCompare(nomeDe(b),"pt"));return out}
+function temGente(pid){const m=pres[pid];return !!m&&Object.keys(m).length>0}
+function futuras(){const t=hoje();return provas.filter(p=>p.data&&parseD(p.data)>=t)}
+function toast(t){const el=$("toast");el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,2200)}
+function status(t){$("statusText").textContent=t||"";$("status").hidden=!t}
+function copiar(text,ta){const falha=()=>{if(ta){ta.focus();ta.select()}toast("Selecionado: usa Copiar do telemóvel")};if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(text).then(()=>toast("Copiado"),falha);else falha()}
+const podeMarcar=()=>ONLINE&&grupo&&me;
+
+// ---------- mensagens ----------
+function mensagem(p){const q=quem(p.id),L=[];L.push(p.nome+" — "+dataLonga(p.data)+" ("+faltam(p.data)+")");
+  const local=[p.concelho,p.distrito].filter(Boolean).join(", ");if(local)L.push("Local: "+local);if(p.distancias)L.push("Distâncias: "+p.distancias);
+  if(q.inscrito.length)L.push("Inscritos: "+q.inscrito.map(nomeDe).join(", "));if(q.vou.length)L.push("Vão: "+q.vou.map(nomeDe).join(", "));if(q.talvez.length)L.push("Talvez: "+q.talvez.map(nomeDe).join(", "));
+  if(!temGente(p.id))L.push("Ainda ninguém marcou. Alguém alinha?");
+  const i=valid(p.inscricao)||valid(p.info);if(i)L.push((valid(p.inscricao)?"Inscrição: ":"Informação: ")+i);return L.join("\n")}
+function resumo(){const lim=new Date(hoje().getTime()+42*864e5);const ps=futuras().filter(p=>parseD(p.data)<=lim&&temGente(p.id));
+  if(!ps.length)return "Ainda ninguém marcou presença em provas das próximas 6 semanas.";
+  return "Próximas provas do grupo:\n\n"+ps.map(p=>{const q=quem(p.id),d=parseD(p.data),parts=[];if(q.inscrito.length)parts.push("inscritos "+q.inscrito.map(nomeDe).join(", "));if(q.vou.length)parts.push("vão "+q.vou.map(nomeDe).join(", "));if(q.talvez.length)parts.push("talvez "+q.talvez.map(nomeDe).join(", "));
+    return "- "+d.getDate()+" de "+MESES[d.getMonth()]+", "+p.nome+(p.concelho?" ("+p.concelho+")":"")+": "+parts.join("; ")+(valid(p.inscricao)?"\n  "+p.inscricao:"")}).join("\n")}
+
+// ---------- acções ----------
+async function setEstado(pid,e){if(!podeMarcar())return;const m=pres[pid]=pres[pid]||{};const antes=m[me];
+  if(antes===e)delete m[me];else m[me]=e;draw();
+  try{if(antes===e)await api("presencas?membro_id=eq."+me+"&prova_id=eq."+encodeURIComponent(pid),{method:"DELETE"});
+    else await api("presencas?on_conflict=membro_id,prova_id",{method:"POST",prefer:"resolution=merge-duplicates,return=minimal",body:{grupo,membro_id:me,prova_id:pid,estado:e,atualizado:new Date().toISOString()}});}
+  catch(err){if(antes)m[me]=antes;else delete m[me];draw();toast("Não foi possível guardar. Tenta outra vez.")}}
+function cliqueInsc(pid){if(!ONLINE||!grupo)return;cliques[pid]=(cliques[pid]||0)+1;api("cliques",{method:"POST",prefer:"return=minimal",body:{grupo,prova_id:pid,membro_id:me}}).catch(()=>{})}
+async function remover(pid){if(confirmDel!==pid){confirmDel=pid;draw();return}confirmDel=null;
+  try{await api("provas?id=eq."+encodeURIComponent(pid),{method:"DELETE"});provas=provas.filter(p=>p.id!==pid);draw();toast("Prova removida")}catch(e){toast("Não foi possível remover.")}}
+
+// ---------- desenho ----------
+function card(p){const d=parseD(p.data),q=quem(p.id),mine=pres[p.id]&&pres[p.id][me];
+  const people=h("div",{class:"people"},...ESTADOS.flatMap(([k,l])=>q[k].map(id=>h("span",{class:"p "+k,title:l,text:nomeDe(id)+(k==="inscrito"?" ✓":"")}))));
+  const seg=podeMarcar()?h("div",{class:"seg",role:"group","aria-label":"A tua presença"},...ESTADOS.map(([k,l])=>h("button",{class:k,"aria-pressed":String(mine===k),onclick:()=>setEstado(p.id,k),text:l}))):null;
+  const insc=valid(p.inscricao),info=valid(p.info);
+  const links=h("div",{class:"links"},
+    insc?h("a",{href:insc,target:"_blank",rel:"noopener",onclick:()=>cliqueInsc(p.id),text:"Inscrição ↗"}):h("span",{class:"hint",text:"Sem link de inscrição"}),
+    info?h("a",{href:info,target:"_blank",rel:"noopener",text:"Informação ↗"}):null,
+    h("button",{class:"linkbtn",onclick:()=>{openMsg=openMsg===p.id?null:p.id;draw()},text:openMsg===p.id?"Fechar mensagem":"Mensagem para o grupo"}),
+    (podeMarcar()&&p.grupo&&p.grupo===grupo)?h("button",{class:"linkbtn",onclick:()=>remover(p.id),text:confirmDel===p.id?"Confirmar remoção":"Remover"}):null);
+  let msg=null;if(openMsg===p.id){const txt=mensagem(p),ta=h("textarea",{readonly:true,"aria-label":"Mensagem para o WhatsApp"});ta.value=txt;
+    msg=h("div",{class:"msg"},ta,h("div",{class:"row"},h("button",{class:"btn primary small",onclick:()=>copiar(txt,ta),text:"Copiar"}),h("a",{class:"btn small",href:"https://wa.me/?text="+encodeURIComponent(txt),target:"_blank",rel:"noopener",text:"Abrir no WhatsApp"})))}
+  const n=cliques[p.id]||0;
+  return h("article",{class:"card"},
+    h("div",{class:"bib","aria-label":dataLonga(p.data)},h("div",{class:"d",text:d.getDate()}),h("div",{class:"m",text:MESES[d.getMonth()].slice(0,3)}),h("div",{class:"w",text:DIAS[d.getDay()]})),
+    h("div",{class:"info"},h("h3",{text:p.nome}),
+      h("div",{class:"meta"},h("strong",{text:[p.concelho,p.distrito].filter(Boolean).join(", ")||"Local por confirmar"}),"  ·  "+faltam(p.data)+(p.nota?"  ·  "+p.nota:"")),
+      p.distancias?h("div",{class:"dist"},...String(p.distancias).split(",").map(s=>s.trim()).filter(Boolean).map(s=>h("span",{text:s}))):null,
+      people.childNodes.length?people:null,seg,links,msg,
+      n?h("div",{class:"owner",text:n+(n===1?" clique":" cliques")+" do grupo no link de inscrição"}):null))}
+function listaPorMes(ps,box,vazio){box.replaceChildren();if(!ps.length){box.append(h("div",{class:"empty",text:vazio}));return}
+  let cur="",list=null;for(const p of ps){const d=parseD(p.data),k=MESES[d.getMonth()]+" "+d.getFullYear();if(k!==cur){cur=k;box.append(h("h2",{class:"month",text:k}));list=h("div",{class:"list"});box.append(list)}list.append(card(p))}}
+function fillSel(sel,first,opts){const v=sel.value,key=JSON.stringify(opts);if(sel.dataset.k===key)return;sel.dataset.k=key;sel.replaceChildren(h("option",{value:"",text:first}),...opts.map(([v,t])=>h("option",{value:v,text:t})));if(opts.some(o=>o[0]===v))sel.value=v}
+
+function draw(){
+  $("entrar").hidden=!(ONLINE&&!grupo);
+  $("quem").hidden=!(ONLINE&&grupo&&loaded&&!me);
+  if(!$("quem").hidden){$("nomes").replaceChildren(...Object.entries(membros).sort((a,b)=>a[1].localeCompare(b[1],"pt")).map(([id,n])=>h("button",{type:"button",onclick:()=>{me=id;store.set(chaveMe(),id);draw()},text:n})))}
+  $("meBtn").hidden=!me;$("meBtn").textContent=me?(grupoNome?grupoNome+" · ":"")+nomeDe(me):"";
+  $("partilhar").hidden=!(ONLINE&&grupo);$("sair").hidden=!me;
+  for(const t of ["grupo","todas","nova"]){$("tab-"+t).setAttribute("aria-selected",String(tab===t));$("view-"+t).hidden=tab!==t}
+  const fut=futuras();const grp=fut.filter(p=>temGente(p.id));
+  $("nGrupo").textContent=loaded?grp.length:"";$("nTodas").textContent=loaded?fut.length:"";
+  if(!loaded){$("view-grupo").replaceChildren(h("div",{class:"empty",text:"A carregar as provas…"}));return}
+  listaPorMes(grp,$("view-grupo"),podeMarcar()?"Ainda ninguém marcou presença. Vai a Todas e carrega em Vou, Inscrito ou Talvez.":"Quando entrares no grupo, aqui aparecem as provas a que o grupo vai.");
+  const q=$("q").value.trim().toLowerCase(),fd=$("fDistrito").value,fm=$("fMes").value;
+  const todas=fut.filter(p=>(!fd||p.distrito===fd)&&(!fm||p.data.slice(0,7)===fm)&&(!q||[p.nome,p.concelho,p.distrito].join(" ").toLowerCase().includes(q)));
+  listaPorMes(todas,$("todasList"),fut.length?"Nenhuma prova com estes filtros.":"Ainda não há provas.");
+  fillSel($("fDistrito"),"Todos os distritos",[...new Set(fut.map(p=>p.distrito).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"pt")).map(x=>[x,x]));
+  fillSel($("fMes"),"Todos os meses",[...new Set(fut.map(p=>p.data.slice(0,7)))].sort().map(m=>[m,MESES[+m.slice(5)-1]+" "+m.slice(0,4)]));
+  $("view-nova").querySelectorAll("input,select,button").forEach(el=>el.disabled=!podeMarcar());
+  if(!$("resumo").hidden)$("resumoText").value=resumo();
+}
+
+// ---------- eventos ----------
+document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{tab=b.dataset.tab;store.set("dorsal.tab",tab);draw()}));
+["q","fDistrito","fMes"].forEach(id=>$(id).addEventListener("input",draw));
+$("resumoBtn").addEventListener("click",()=>{const r=$("resumo");r.hidden=!r.hidden;if(!r.hidden){const t=resumo();$("resumoText").value=t;$("resumoWa").href="https://wa.me/?text="+encodeURIComponent(t)}});
+$("resumoCopy").addEventListener("click",()=>copiar($("resumoText").value,$("resumoText")));
+$("codigoForm").addEventListener("submit",e=>{e.preventDefault();const c=lerCodigo($("codigo").value)||lerCodigo("?g="+$("codigo").value.trim());if(!c){$("codigoMsg").textContent="Não reconheci esse link ou código.";return}grupo=c;store.set("dorsal.grupo",c);loaded=false;draw();carregar()});
+$("novoForm").addEventListener("submit",async e=>{e.preventDefault();const nome=$("novoNome").value.trim().slice(0,30);if(!nome)return;
+  try{const r=await api("membros",{method:"POST",prefer:"return=representation",body:{grupo,nome}});const m=r&&r[0];if(!m)throw 0;membros[m.id]=m.nome;me=m.id;store.set(chaveMe(),m.id);$("novoNome").value="";draw();toast("Bem-vindo, "+m.nome)}
+  catch(err){toast("Não foi possível juntar-te. Tenta outra vez.")}});
+$("meBtn").addEventListener("click",()=>{tab="grupo";draw();window.scrollTo({top:0,behavior:"smooth"})});
+$("sair").addEventListener("click",()=>{me=null;store.set(chaveMe(),null);draw();window.scrollTo({top:0})});
+$("partilhar").addEventListener("click",()=>{const link=location.origin+location.pathname+"?g="+grupo;copiar("Junta-te ao grupo"+(grupoNome?" "+grupoNome:"")+" no Dorsal para combinarmos as provas de trail: "+link,null)});
+$("nDistrito").replaceChildren(h("option",{value:"",text:"Escolher"}),...DISTRITOS.map(d=>h("option",{value:d,text:d})));
+$("novaForm").addEventListener("submit",async e=>{e.preventDefault();if(!podeMarcar())return;
+  const nome=$("nNome").value.trim(),data=$("nData").value;if(!nome||!data)return;
+  const id=(nome.normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,60)||"prova")+"-"+data;
+  const body={id,nome,data,distrito:$("nDistrito").value,concelho:$("nConcelho").value.trim(),distancias:$("nDist").value.trim(),inscricao:valid($("nInsc").value.trim())||"",info:valid($("nInfo").value.trim())||"",fonte:"grupo",grupo,criado_por:me};
+  try{await api("provas",{method:"POST",prefer:"return=minimal",body});$("novaForm").reset();$("novaMsg").textContent="";toast("Prova acrescentada");tab="todas";await carregar()}
+  catch(err){$("novaMsg").textContent=err.status===409?"Essa prova já existe nessa data.":"Não foi possível guardar. Tenta outra vez."}});
+
+draw();carregar();
+setInterval(()=>{if(document.visibilityState==="visible"&&ONLINE)carregar()},30000);
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&ONLINE&&loaded)carregar()});
+if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+})();
