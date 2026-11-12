@@ -154,6 +154,8 @@ function listaPorMes(ps,box,vazio){box.replaceChildren();if(!ps.length){box.appe
 function fillSel(sel,first,opts){const v=sel.value,key=JSON.stringify(opts);if(sel.dataset.k===key)return;sel.dataset.k=key;sel.replaceChildren(h("option",{value:"",text:first}),...opts.map(([v,t])=>h("option",{value:v,text:t})));if(opts.some(o=>o[0]===v))sel.value=v}
 
 function draw(){
+  const sec=secAtual();$("pg-sec").hidden=!sec;$("pg-provas").hidden=!!sec;desenharMenu();
+  if(sec)desenharSec(sec);else secDesenhada=null;
   $("entrar").hidden=!(ONLINE&&!grupo);
   $("quem").hidden=!(ONLINE&&grupo&&loaded&&!me);
   if(!$("quem").hidden){$("nomes").replaceChildren(...Object.entries(membros).sort((a,b)=>a[1].localeCompare(b[1],"pt")).map(([id,n])=>h("button",{type:"button",onclick:()=>{me=id;store.set(chaveMe(),id);draw()},text:n})))}
@@ -175,6 +177,68 @@ function draw(){
   $("view-nova").querySelectorAll("input,select,button").forEach(el=>el.disabled=!podeMarcar());
   if(!$("resumo").hidden)$("resumoText").value=resumo();
 }
+
+// ---------- secções (menu lateral) ----------
+const SECOES=window.DORSAL_SECOES||[];
+function secAtual(){const m=location.hash.match(/[#&]s=([a-z-]+)/);return m&&SECOES.some(x=>x.id===m[1])?m[1]:null}
+let secDesenhada=null;
+function comRefs(texto,sid){const out=[];let i=0;String(texto).replace(/\[(\d+)\]/g,(m,n,pos)=>{out.push(texto.slice(i,pos));
+  out.push(h("sup",null,h("a",{href:"#",onclick:e=>{e.preventDefault();const f=document.getElementById("f-"+sid+"-"+n);if(f)f.scrollIntoView({behavior:"smooth",block:"center"})},"aria-label":"Fonte "+n,text:"["+n+"]"})));i=pos+m.length;return m});
+  out.push(texto.slice(i));return out}
+function numIn(id,attrs){return h("input",Object.assign({id,type:"number",inputmode:"decimal",min:"0"},attrs))}
+function calcEsforco(sid){const out=h("div",{class:"res"});
+  const box=h("div",{class:"calc"},h("h2",{text:"Esforço de uma prova"}),
+    h("div",{class:"campos"},h("label",{for:"ceKm"},"Distância (km)",numIn("ceKm",{value:"25",step:"0.1"})),h("label",{for:"ceD"},"D+ (m)",numIn("ceD",{value:"1000",step:"10"})),
+      h("label",{class:"full",for:"ceR",style:"grid-column:1/-1"},"O teu ritmo por km-esforço (min), opcional",numIn("ceR",{placeholder:"por exemplo 8",step:"0.5"}))),out);
+  const calc=()=>{const km=parseFloat($("ceKm").value)||0,d=parseFloat($("ceD").value)||0,r=parseFloat($("ceR").value);const ke=km+d/100;
+    out.replaceChildren(h("div",null,h("b",{text:ke.toFixed(1).replace(".",",")})," km-esforço"),
+      h("p",{class:"hint"},...comRefs(String(km).replace(".",",")+" km + "+d+" m ÷ 100, a convenção da ITRA e do UTMB [1][2]. "+(km>0?"Equivale a "+(ke/km).toFixed(2).replace(".",",")+" vezes a distância em plano.":""),sid)),
+      r>0?h("p",null,"Tempo estimado: ",h("strong",{text:hm(ke*r/60)})," a "+String(r).replace(".",",")+" min por km-esforço."):null)};
+  box.addEventListener("input",calc);setTimeout(calc);return box}
+function hm(horas){const t=Math.round(horas*60);return Math.floor(t/60)+" h "+String(t%60).padStart(2,"0")+" min"}
+function calcAbast(sid){const out=h("div",{class:"res"});
+  const box=h("div",{class:"calc"},h("h2",{text:"Plano de abastecimento"}),
+    h("div",{class:"campos"},h("label",{for:"caH"},"Duração prevista (h)",numIn("caH",{value:"3",step:"0.25"})),h("label",{for:"caG"},"Gramas por gel ou barra",numIn("caG",{value:"25",step:"1"}))),out);
+  const calc=()=>{const hrs=parseFloat($("caH").value)||0,g=parseFloat($("caG").value)||25;let lo,hi,ref;
+    if(hrs<1){out.replaceChildren(h("p",null,"Abaixo de 1 hora não precisas de comer durante o esforço. Bebe conforme a sede.")) ;return}
+    if(hrs<=2.5){lo=30;hi=60;ref="[3]"}else{lo=60;hi=90;ref="[3]"}
+    const tl=Math.round(lo*hrs),th=Math.round(hi*hrs);
+    out.replaceChildren(
+      h("div",null,h("b",{text:lo+"–"+hi+" g/h"})," de hidratos de carbono"),
+      h("p",null,...comRefs("Total para "+String(hrs).replace(".",",")+" h: "+tl+"–"+th+" g, ou seja, cerca de "+Math.ceil(tl/g)+" a "+Math.ceil(th/g)+" unidades de "+g+" g "+ref+"."+(hrs>2.5?" Acima de 60 g/h usa misturas de glucose com frutose [3].":""),sid)),
+      h("p",null,...comRefs("Líquidos: bebe com sede [5]. Em ultras, a referência da ISSN é 450–750 mL/h, ou "+Math.round(.45*hrs*10)/10+"–"+Math.round(.75*hrs*10)/10+" L no total; mais com calor [4].",sid).map(x=>typeof x==="string"?x.replace(/(\d)\.(\d)/g,"$1,$2"):x)))};
+  box.addEventListener("input",calc);setTimeout(calc);return box}
+function checklist(b){const key=i=>"dorsal.check."+b.id+"."+i;let i=0;const total=b.grupos.reduce((a,g)=>a+g.itens.length,0);
+  const prog=h("p",{class:"prog"});const upd=()=>{let n=0;for(let k=0;k<total;k++)if(store.get(key(k))==="1")n++;prog.textContent=n+" de "+total+" prontos"};
+  const grupos=b.grupos.map(g=>h("div",{class:"check"},h("h2",{text:g.h}),...g.itens.map(t=>{const k=i++;const cb=h("input",{type:"checkbox"});cb.checked=store.get(key(k))==="1";
+    cb.addEventListener("change",()=>{store.set(key(k),cb.checked?"1":null);upd()});return h("label",null,cb,h("span",{text:t}))})));
+  const limpar=h("button",{class:"btn small",onclick:()=>{for(let k=0;k<total;k++)store.set(key(k),null);secDesenhada=null;draw()},text:"Limpar tudo"});
+  upd();return h("div",null,h("div",{class:"row between"},prog,limpar),...grupos)}
+function bloco(b,sid){switch(b.t){
+  case "h":return h("h2",{text:b.x});
+  case "p":return h("p",null,...comRefs(b.x,sid));
+  case "nota":return h("div",{class:"nota"},...comRefs(b.x,sid));
+  case "lista":return h("ul",{class:"pl"},...b.itens.map(x=>h("li",null,...comRefs(x,sid))));
+  case "factos":return h("div",{class:"factos"},...b.itens.map(f=>h("div",{class:"facto"},h("b",{text:f.n}),h("span",null,...comRefs(f.x,sid)))));
+  case "linha":return h("ol",{class:"linha"},...b.itens.map(f=>h("li",null,h("b",{text:f.a}),h("span",null,...comRefs(f.x,sid)))));
+  case "termos":return h("dl",{class:"termos"},...b.itens.flatMap(([t,d])=>[h("dt",{text:t}),h("dd",{text:d})]));
+  case "checklist":return checklist(b);
+  case "calc-esforco":return calcEsforco(sid);
+  case "calc-abast":return calcAbast(sid);
+  default:return null}}
+function desenharSec(sid){if(secDesenhada===sid)return;secDesenhada=sid;const S=SECOES.find(x=>x.id===sid);const box=$("pg-sec");
+  box.replaceChildren(h("article",{class:"sec"},h("h1",{text:S.titulo}),h("p",{class:"lead",text:S.resumo}),...S.blocos.map(b=>bloco(b,sid)),
+    S.fontes.length?h("section",{class:"fontes"},h("strong",{text:"Fontes"}),h("ol",null,...S.fontes.map((f,i)=>h("li",{id:"f-"+sid+"-"+(i+1)},f.t+" ",h("a",{href:f.u,target:"_blank",rel:"noopener",text:"Abrir ↗"}))))):null))}
+function abrirMenu(abrir){$("menu").hidden=!abrir;$("scrim").hidden=!abrir;$("menuBtn").setAttribute("aria-expanded",String(abrir));document.body.style.overflow=abrir?"hidden":"";if(abrir)$("menuList").querySelector("[aria-current]")?.focus()}
+function desenharMenu(){const cur=secAtual()||"provas";
+  $("menuList").replaceChildren(
+    h("li",null,h("a",{href:"#",onclick:e=>{e.preventDefault();history.pushState(null,"",location.pathname+location.search);abrirMenu(false);draw();window.scrollTo({top:0})},"aria-current":cur==="provas"?"page":null},h("span",{class:"ic",text:"◆"}),"Provas")),
+    h("li",{class:"sep"}),
+    ...SECOES.map(x=>h("li",null,h("a",{href:"#s="+x.id,onclick:()=>abrirMenu(false),"aria-current":cur===x.id?"page":null},h("span",{class:"ic",text:x.icone}),x.titulo))))}
+$("menuBtn").addEventListener("click",()=>abrirMenu(true));
+$("menuX").addEventListener("click",()=>abrirMenu(false));
+$("scrim").addEventListener("click",()=>abrirMenu(false));
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("menu").hidden)abrirMenu(false)});
 
 // ---------- eventos ----------
 document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{tab=b.dataset.tab;store.set("dorsal.tab",tab);draw()}));

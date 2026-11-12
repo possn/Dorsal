@@ -17,9 +17,17 @@
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
-<div class="topbar"><div class="wrap brand"><img src="icons/favicon.svg" alt="" width="34" height="34"><span>Dorsal</span><button class="me-btn" id="meBtn" hidden></button></div></div>
+<div class="topbar"><div class="wrap brand"><button class="menu-btn" id="menuBtn" aria-label="Abrir menu" aria-expanded="false" aria-controls="menu"><span></span><span></span><span></span></button><img src="icons/favicon.svg" alt="" width="34" height="34"><span>Dorsal</span><button class="me-btn" id="meBtn" hidden></button></div></div>
 <div class="ribbon" aria-hidden="true"></div>
+<div class="scrim" id="scrim" hidden></div>
+<nav class="drawer" id="menu" aria-label="Secções" hidden>
+  <div class="drawer-head"><span>Dorsal</span><button class="drawer-x" id="menuX" aria-label="Fechar menu">✕</button></div>
+  <ul id="menuList"></ul>
+  <p class="drawer-foot">Conteúdos com fontes no fim de cada secção. Não substituem aconselhamento médico.</p>
+</nav>
 <main class="wrap">
+  <section id="pg-sec" hidden></section>
+  <div id="pg-provas">
   <p class="sub">Quem do grupo vai a que prova, com o link de inscrição à mão.</p>
 
   <section id="entrar" class="panel" hidden>
@@ -92,9 +100,11 @@
     <button class="linkbtn" id="partilhar">Convidar alguém para o grupo</button>
     <button class="linkbtn" id="sair">Mudar de pessoa</button>
   </footer>
+  </div>
 </main>
 <div class="toast" id="toast" hidden></div>
 <script src="config.js"></script>
+<script src="conteudos.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
