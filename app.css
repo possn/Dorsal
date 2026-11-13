@@ -575,3 +575,18 @@ body.modo-seguir>*:not(#seguir):not(#toast){display:none !important}
 .rotarow label.linkbtn{font-weight:600;color:var(--accent);cursor:pointer;text-transform:none;letter-spacing:0;font-size:.85rem}
 .perfilbox{margin-top:4px}
 .prevcampos .rotarow label.linkbtn{display:inline;color:var(--accent)}.rotarow .hint{white-space:nowrap}.rotarow button.linkbtn{font-size:.85rem}
+/* mochila */
+.mochila summary{list-style:none;cursor:pointer}
+.mochila summary::-webkit-details-marker{display:none}
+.mochila summary h3{display:flex;justify-content:space-between;align-items:baseline;margin:0}
+.mochila summary h3::after{content:"▸";color:var(--accent);margin-left:8px}
+.mochila[open] summary h3::after{content:"▾"}
+.mochila .dbarra{height:8px;margin:8px 0 2px}
+.mitens{display:flex;flex-direction:column;gap:2px;margin-top:8px}
+.mg{margin:10px 0 2px;font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted,#6b6b6b)}
+.mitem{display:flex;gap:10px;align-items:flex-start;padding:7px 2px;border-bottom:1px solid var(--line);cursor:pointer}
+.mitem input{width:20px;height:20px;margin-top:1px;accent-color:var(--accent);flex:none}
+.mitem>span{display:flex;flex-direction:column}
+.mitem small{color:var(--muted,#6b6b6b);font-size:.8rem}
+.mitem.ok>span>span{text-decoration:line-through;opacity:.6}
+.mnovo{gap:8px;margin:10px 0}.mnovo input{flex:1}

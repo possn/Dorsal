@@ -699,6 +699,62 @@ function formDesafio(){const ano=new Date().getFullYear(),prox=new Date().getMon
     h("div",{class:"full row"},h("button",{class:"btn primary",type:"submit",text:"Criar desafio"}),h("button",{class:"btn",type:"button",onclick:()=>{novoDesafio=false;draw()},text:"Cancelar"})));
   return f}
 
+// ---------- mochila inteligente ----------
+function solDia(iso,lat,lon){// NOAA, aproximação: devolve [nascer, pôr] como Date
+  const d=parseD(iso),n=Math.round((d-new Date(d.getFullYear(),0,1))/864e5)+1,g=2*Math.PI/365*(n-1);
+  const eq=229.18*(.000075+.001868*Math.cos(g)-.032077*Math.sin(g)-.014615*Math.cos(2*g)-.040849*Math.sin(2*g));
+  const dec=.006918-.399912*Math.cos(g)+.070257*Math.sin(g)-.006758*Math.cos(2*g)+.000907*Math.sin(2*g)-.002697*Math.cos(3*g)+.00148*Math.sin(3*g);
+  const r=Math.PI/180,ha=Math.acos(Math.cos(90.833*r)/(Math.cos(lat*r)*Math.cos(dec))-Math.tan(lat*r)*Math.tan(dec))/r;
+  const base=Date.UTC(d.getFullYear(),d.getMonth(),d.getDate());
+  return [new Date(base+(720-4*(lon+ha)-eq)*60000),new Date(base+(720-4*(lon-ha)-eq)*60000)]}
+function itensMochila(p){let cfg={};try{cfg=JSON.parse(store.get("dorsal.prev."+p.id)||"{}")}catch(_){}
+  const x=exDe(p.id,me),kmP=(()=>{const m=String(x.percurso||"").match(/(\d+(?:[.,]\d+)?)\s*k/i)||String(p.distancias||"").match(/(\d+(?:[.,]\d+)?)\s*k/i);return m?parseFloat(m[1].replace(",",".")):0})();
+  const km=parseFloat(String(cfg.km||"").replace(",","."))||kmP,dp=parseInt(cfg.dp,10)||0,hora=cfg.hora||p.hora||"";
+  const pv=km?preverTempo(me,km,dp):null,durH=pv?pv.med/3600:km?km*9/60:0;
+  const m=meteo[p.id]&&meteo[p.id].estado==="ok"?meteo[p.id]:null,c=coordsDe(p);
+  let noite=false,motNoite="";if(c&&hora){const [nasc,por]=solDia(p.data,c[0],c[1]);const [H,M]=hora.split(":").map(Number);const ini=parseD(p.data);ini.setHours(H,M,0,0);const fim=new Date(ini.getTime()+durH*3600e3);
+    if(ini<nasc){noite=true;motNoite="partes antes do nascer do sol ("+hhmm(nasc)+")"}else if(fim>new Date(por.getTime()-30*60000)){noite=true;motNoite="podes acabar perto ou depois do pôr do sol ("+hhmm(por)+")"}}
+  const L=[];const A=(g,id,t,porque)=>L.push({g,id,t,porque});
+  A("Essencial","dorsal","Dorsal, alfinetes ou cinto porta-dorsal","");
+  A("Essencial","id","Documento de identificação","Pedido no levantamento do dorsal e útil em caso de acidente.");
+  A("Essencial","tel","Telemóvel carregado, com o número da organização","Em muitos trails é material obrigatório.");
+  A("Essencial","copo","Copo reutilizável","Muitas provas já não dão copos nos abastecimentos.");
+  A("Essencial","manta","Manta térmica","Obrigatória em muitos regulamentos de trail; pesa poucos gramas.");
+  A("Essencial","apito","Apito","Frequente no material obrigatório; serve para pedir ajuda.");
+  if(durH>=1||km>=10)A("Essencial","agua","Água, pelo menos "+(durH>=3?"1 L":"0,5 L"),durH?"Para ≈ "+String(Math.round(durH*10)/10).replace(".",",")+" h de prova.":"");
+  if(durH>=1)A("Essencial","comida","Géis, barras ou comida: ≈ "+Math.round((durH<=2.5?30:60)*durH)+"–"+Math.round((durH<=2.5?60:90)*durH)+" g de hidratos","Segundo o plano por hora do cartão \"A tua prova\".");
+  if(noite)A("Para estas condições","frontal","Frontal com pilhas ou bateria carregada",motNoite[0].toUpperCase()+motNoite.slice(1)+".");
+  if(m&&m.chuva!=null&&m.chuva>=40||km>=30||(m&&m.min<10))A("Para estas condições","casaco","Corta-vento ou casaco impermeável com capuz",m&&m.chuva>=40?"Probabilidade de chuva de "+m.chuva+"%.":km>=30?"Em provas longas o tempo pode mudar, sobretudo em altitude.":"Mínima prevista de "+Math.round(m.min)+" °C.");
+  if(m&&m.min<8)A("Para estas condições","termica","Camada térmica de manga comprida","Mínima prevista de "+Math.round(m.min)+" °C.");
+  if(m&&m.min<5)A("Para estas condições","luvas","Luvas e gorro ou buff","Mínima prevista de "+Math.round(m.min)+" °C.");
+  if(m&&(m.max>=22||[0,1].includes(m.cod)))A("Para estas condições","sol","Boné ou viseira, óculos de sol e protector solar",m.max>=22?"Máxima prevista de "+Math.round(m.max)+" °C.":"Previsão de céu limpo.");
+  if(durH>=4||(m&&m.max>=25))A("Para estas condições","sais","Sais ou bebida com electrólitos",durH>=4?"Prova longa (mais de 4 h).":"Calor previsto.");
+  if(km>=15&&dp/km>=40)A("Para estas condições","bastoes","Bastões (se o regulamento deixar)",Math.round(dp/km)+" m de D+ por km.");
+  if(km>=20)A("Para estas condições","colete","Colete ou mochila com espaço para tudo isto","");
+  if(km>=42)A("Para estas condições","meias","Meias suplentes e roupa seca no saco de apoio","Prova de ultra distância.");
+  if(durH>=2)A("Conforto","antifriccao","Anti-fricção (vaselina) nos pés e zonas de atrito","");
+  A("Conforto","pensos","Pensos e Compeed para bolhas","");
+  A("Conforto","dinheiro","Algum dinheiro ou cartão","");
+  A("Conforto","depois","Roupa, calçado e toalha para depois","");
+  A("Conforto","saco","Saco para a roupa suja","");
+  let extra=[];try{extra=JSON.parse(store.get("dorsal.mochila.extra."+p.id)||"[]")}catch(_){}
+  for(const [i,t] of extra.entries())A("Os teus","x"+i,t,"");
+  return {L,temMeteo:!!m}}
+function mochilaView(p){if(!me||!pres[p.id]||!foiA(p.id,me))return null;const dias=Math.round((parseD(p.data)-hoje())/864e5);if(dias<0)return null;
+  const {L,temMeteo}=itensMochila(p);let feitos={};try{feitos=JSON.parse(store.get("dorsal.mochila."+p.id)||"{}")}catch(_){}
+  const n=L.filter(i=>feitos[i.id]).length;const aberto=store.get("dorsal.mochila.aberta."+p.id)==="1";
+  const det=h("details",{class:"grupo-bloco mochila"},h("summary",null,h("h3",null,"🎒 Mochila ",h("span",{class:"n",text:n+"/"+L.length})),h("div",{class:"dbarra"},h("i",{style:"width:"+Math.round(100*n/Math.max(1,L.length))+"%"}))));
+  if(aberto)det.open=true;det.addEventListener("toggle",()=>store.set("dorsal.mochila.aberta."+p.id,det.open?"1":"0"));
+  let g0="";const ul=h("div",{class:"mitens"});
+  for(const it of L){if(it.g!==g0){g0=it.g;ul.append(h("strong",{class:"mg",text:it.g}))}
+    const cb=h("input",{type:"checkbox",checked:!!feitos[it.id]});cb.addEventListener("change",()=>{if(cb.checked)feitos[it.id]=1;else delete feitos[it.id];store.set("dorsal.mochila."+p.id,JSON.stringify(feitos));draw()});
+    ul.append(h("label",{class:"mitem"+(feitos[it.id]?" ok":"")},cb,h("span",null,h("span",{text:it.t}),it.porque?h("small",{text:it.porque}):null)))}
+  const novo=h("input",{placeholder:"Acrescentar outro item",maxlength:"60"});
+  det.append(ul,h("form",{class:"row mnovo",onsubmit:e=>{e.preventDefault();const t=novo.value.trim();if(!t)return;let ex=[];try{ex=JSON.parse(store.get("dorsal.mochila.extra."+p.id)||"[]")}catch(_){}ex.push(t);store.set("dorsal.mochila.extra."+p.id,JSON.stringify(ex.slice(0,20)));draw()}},novo,h("button",{class:"btn small",type:"submit",text:"+"})),
+    h("p",{class:"hint",text:(temMeteo?"Ajustada à previsão do tempo, à duração prevista e ao pôr do sol. ":"A lista ajusta-se ao tempo quando houver previsão (a partir de 15 dias antes). ")+"Confirma sempre o material obrigatório no regulamento da prova."}),
+    valid(p.info||"")?h("a",{href:valid(p.info),target:"_blank",rel:"noopener",text:"Abrir a página da prova ↗"}):null);
+  return det}
+
 // ---------- membros ----------
 const linkMembro=id=>"#s=membro&m="+id;
 const fmtKm=n=>fmtN(Math.round(n*10)/10);
@@ -1004,6 +1060,7 @@ function detalhe(pid){const box=$("view-prova");box.replaceChildren();
       return h("div",{class:"plano"},h("strong",{text:"O teu plano"}),ops.length?selP:h("input",{placeholder:"Percurso (por exemplo 25K)",maxlength:"40",value:x.percurso,onchange:e=>setExtra(p.id,{percurso:e.target.value.trim()})}),boleia,lug,casaEl)})():null,
     diretoView(p),
     eTreino(p)?null:prevProva(p),
+    eTreino(p)?null:mochilaView(p),
     gente,
     boleiasView(p),
     conversa(p),
