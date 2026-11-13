@@ -543,6 +543,92 @@ function boleiasView(p){if(!grupo)return null;const B=planoBoleias(p);if(!B.ofer
       h("p",{class:"hint",text:"Distâncias em linha recta entre concelhos × 1,3, como aproximação à estrada. Preço por defeito: média do gasóleo em Portugal em Novembro de 2026 (DGEG); ajusta ao teu carro."})))}
 const fmtEur=v=>(Math.round(v*100)/100).toFixed(2).replace(".",",")+" €";
 
+// ---------- apoio em direto ----------
+const SEGUIR=(()=>{const t=new URLSearchParams(location.search).get("seguir");return t&&/^[0-9a-f]{16,40}$/.test(t)?t:null})();
+const diretosP={};
+const hhmm=d=>new Date(d).toLocaleTimeString("pt-PT",{hour:"2-digit",minute:"2-digit"});
+function etaDireto(d){if(!d.inicio)return null;const ini=new Date(d.inicio).getTime();if(d.fim)return null;
+  const ps=(d.passagens||[]).slice().sort((a,b)=>b.i-a.i)[0];const kt=+d.km_total||0;
+  if(ps&&kt){const km=+d.pontos[ps.i];if(km>0&&kt>km){const el=new Date(ps.t).getTime()-ini;return new Date(ini+el*Math.pow(kt/km,1.06))}}
+  return d.previsao_s?new Date(ini+d.previsao_s*1000):null}
+function estadoDireto(d,quem){const ini=d.inicio?new Date(d.inicio).getTime():null;
+  if(d.fim)return quem+" chegou à meta em "+fmtH(Math.round((new Date(d.fim)-ini)/1000))+" 🎉";
+  if(!ini)return quem+" ainda não partiu";
+  const ps=(d.passagens||[]).slice().sort((a,b)=>b.i-a.i)[0],eta=etaDireto(d);
+  return (ps?quem+" passou no abast. "+(ps.i+1)+" (km "+String(d.pontos[ps.i]).replace(".",",")+") às "+hhmm(ps.t):quem+" partiu às "+hhmm(d.inicio))+(eta?" · chegada prevista ≈ "+hhmm(eta):"")}
+async function carregarDiretos(pid,forcar){const c=diretosP[pid];if(!forcar&&c&&(c.a||Date.now()-c.t<20000))return;diretosP[pid]=Object.assign(c||{lista:[],apoios:[]},{a:true});
+  try{const lista=await api("direto?prova_id=eq."+encodeURIComponent(pid)+"&select=*");const meu=(lista||[]).find(d=>d.membro_id===me);
+    const apoios=meu?await api("apoios?direto_id=eq."+meu.id+"&select=nome,texto,criado_em&order=criado_em.desc&limit=30"):[];
+    diretosP[pid]={lista:lista||[],apoios:apoios||[],t:Date.now(),a:false}}catch(_){diretosP[pid]={lista:[],apoios:[],t:Date.now(),a:false}}
+  if(provaAberta()===pid)draw()}
+const avisarDireto=(d,ponto)=>fetch(FN,{method:"POST",headers:fnHeaders(),body:JSON.stringify({tipo:"direto",direto_id:d.id,ponto:String(ponto)}),keepalive:true}).catch(()=>{});
+const linkSeguir=d=>location.origin+location.pathname+"?seguir="+d.token;
+async function partilharSeguir(d,p){const url=linkSeguir(d),t="Segue-me em direto no "+p.nome+" e manda-me força 💪";
+  try{if(navigator.share){await navigator.share({title:p.nome,text:t,url});return}}catch(e){if(e&&e.name==="AbortError")return}copiar(t+" "+url)}
+async function mudarDireto(d,campos,ponto){try{await api("direto?id=eq."+d.id,{method:"PATCH",prefer:"return=minimal",body:campos});Object.assign(d,campos);if(ponto!=null)avisarDireto(d,ponto);draw()}catch(_){toast("Não foi possível guardar. Tenta outra vez.")}}
+function diretoView(p){if(eTreino(p)||!grupo)return null;const dias=Math.round((parseD(p.data)-hoje())/864e5);
+  const c=diretosP[p.id];if(!c||Date.now()-c.t>20000)carregarDiretos(p.id);const lista=c?c.lista:[];
+  const meu=lista.find(d=>d.membro_id===me),outros=lista.filter(d=>d.membro_id!==me&&d.inicio);
+  const souAtleta=me&&pres[p.id]&&foiA(p.id,me);
+  if(!meu&&!outros.length&&(!souAtleta||dias>2||dias<-1))return null;
+  const box=h("section",{class:"grupo-bloco direto"},h("h3",null,(lista.some(d=>d.inicio&&!d.fim)?h("span",{class:"aovivo",text:"● Em direto"}):"Apoio em direto")));
+  for(const d of outros)box.append(h("p",{class:"outrodireto",text:estadoDireto(d,nomeDe(d.membro_id))}));
+  if(!souAtleta&&!meu)return box;
+  if(!meu){let cfg={};try{cfg=JSON.parse(store.get("dorsal.prev."+p.id)||"{}")}catch(_){}
+    const km=parseFloat(String(cfg.km||"").replace(",","."))||0,dp=parseInt(cfg.dp,10)||0,pv=km?preverTempo(me,km,dp):null;
+    const abs=String(cfg.abs||"").split(/[;\s]+/).map(v=>parseFloat(v.replace(",","."))).filter(v=>v>0&&(!km||v<km)).sort((a,b)=>a-b);
+    box.append(h("p",{class:"hint",text:"No dia da prova, marcas cada abastecimento com um toque. A família e os amigos seguem num link, sem conta, veem a hora prevista de chegada e mandam-te mensagens de força que te chegam como notificação."}),
+      !km?h("p",{class:"hint",text:"Dica: preenche antes os km e os abastecimentos em \"A tua prova\", acima, para teres horas previstas."}):null,
+      h("button",{class:"btn primary",type:"button",onclick:async()=>{try{const r=await api("direto",{method:"POST",prefer:"return=representation",body:{grupo,membro_id:me,prova_id:p.id,km_total:km||null,previsao_s:pv?Math.round(pv.med):null,pontos:abs}});
+        diretosP[p.id]=null;await carregarDiretos(p.id,true);const d=(r&&r[0])||diretosP[p.id].lista.find(x=>x.membro_id===me);if(d)partilharSeguir(d,p)}catch(_){toast("Não foi possível preparar o direto.")}},text:"Preparar o direto e partilhar o link"}));
+    return box}
+  const d=meu,ini=d.inicio?new Date(d.inicio):null,feitos=new Set((d.passagens||[]).map(x=>x.i));
+  const prox=(d.pontos||[]).findIndex((_,i)=>!feitos.has(i));
+  box.append(h("div",{class:"row linkrow"},h("button",{class:"btn small",type:"button",onclick:()=>partilharSeguir(d,p),text:"↗ Link para quem te apoia"})));
+  if(!ini){box.append(h("button",{class:"btn primary grande",type:"button",onclick:()=>mudarDireto(d,{inicio:new Date().toISOString()},"partida"),text:"▶ Parti agora"}),
+      h("button",{class:"linkbtn",type:"button",onclick:async()=>{try{await api("direto?id=eq."+d.id,{method:"DELETE"});diretosP[p.id]=null;carregarDiretos(p.id,true)}catch(_){}},text:"Cancelar o direto"}))}
+  else if(!d.fim){const el=Math.round((Date.now()-ini)/1000),eta=etaDireto(d);
+    box.append(h("div",{class:"dirstat"},h("div",null,h("span",{class:"k",text:"Em prova"}),h("b",{text:fmtH(el)})),eta?h("div",null,h("span",{class:"k",text:"Chegada prevista"}),h("b",{text:hhmm(eta)})):null));
+    if(prox>=0)box.append(h("button",{class:"btn primary grande",type:"button",onclick:()=>{const ps=[...(d.passagens||[]),{i:prox,t:new Date().toISOString()}];mudarDireto(d,{passagens:ps},prox)},text:"Passei no abast. "+(prox+1)+" · km "+String(d.pontos[prox]).replace(".",",")}));
+    box.append(h("button",{class:(prox>=0?"btn":"btn primary")+" grande",type:"button",onclick:()=>mudarDireto(d,{fim:new Date().toISOString()},"meta"),text:"🏁 Cheguei à meta"}));
+    if((d.passagens||[]).length)box.append(h("button",{class:"linkbtn",type:"button",onclick:()=>{const ps=(d.passagens||[]).slice(0,-1);mudarDireto(d,{passagens:ps})},text:"Desfazer a última passagem"}))}
+  else{const s=Math.round((new Date(d.fim)-ini)/1000);box.append(h("p",{class:"dirfim",text:"Terminaste em "+hms(s)+" 🎉"}),
+      h("button",{class:"btn small",type:"button",onclick:()=>{setExtra(p.id,{tempo:hms(s),km:d.km_total!=null?+d.km_total:exDe(p.id,me).km});toast("Tempo guardado nos teus resultados")},text:"Guardar este tempo nos meus resultados"}),
+      h("button",{class:"linkbtn",type:"button",onclick:()=>mudarDireto(d,{fim:null}),text:"Ainda não acabei"}))}
+  if(ini&&(d.passagens||[]).length)box.append(h("ol",{class:"passagens"},h("li",null,h("b",{text:hhmm(ini)}),h("span",{text:"Partida"})),...(d.passagens||[]).slice().sort((a,b)=>a.i-b.i).map(x=>h("li",null,h("b",{text:hhmm(x.t)}),h("span",{text:"Abast. "+(x.i+1)+" · km "+String(d.pontos[x.i]).replace(".",",")})))));
+  const ap=c?c.apoios:[];if(ap.length)box.append(h("div",{class:"apoios"},h("strong",{text:"💬 Mensagens de apoio ("+ap.length+")"}),...ap.slice(0,12).map(a=>h("p",null,h("b",{text:a.nome+": "}),a.texto))));
+  return box}
+// página pública de quem apoia
+async function paginaSeguir(token){document.body.classList.add("modo-seguir");const root=h("div",{id:"seguir",class:"seguir"});document.body.append(root);
+  let dados=null,nomeApoio=store.get("dorsal.nomeapoio")||"",enviado=0;
+  const carregarS=async()=>{try{dados=await api("rpc/seguir_ver",{method:"POST",body:{p_token:token}})}catch(_){}desenharS()};
+  const desenharS=()=>{if(document.activeElement&&root.contains(document.activeElement)&&/INPUT|TEXTAREA/.test(document.activeElement.tagName))return;
+    root.replaceChildren(h("header",{class:"seghead"},h("img",{src:"icons/dorsal-v2.svg",alt:"",width:32,height:32}),h("b",{text:"DORSAL"}),h("span",{class:"hint",text:"Apoio em direto"})));
+    if(!dados){root.append(h("p",{class:"lead",text:"Este link já não é válido ou ainda está a carregar."}));return}
+    const d=dados,p=d.prova||{},ini=d.inicio?new Date(d.inicio).getTime():null;
+    const eta=(()=>{if(!ini||d.fim)return null;const ps=(d.passagens||[]).slice().sort((a,b)=>b.i-a.i)[0],kt=+d.km_total||0;if(ps&&kt){const km=+d.pontos[ps.i];if(km>0&&kt>km){const el=new Date(ps.t).getTime()-ini;return new Date(ini+el*Math.pow(kt/km,1.06))}}return d.previsao_s?new Date(ini+d.previsao_s*1000):null})();
+    root.append(h("div",{class:"segcard"},h("span",{class:"k",text:(d.grupo||"")+(p.data?" · "+dataLonga(p.data):"")}),h("h1",{text:d.atleta||"Atleta"}),h("p",{class:"lead",text:p.nome||""}),
+      h("div",{class:"segestado "+(d.fim?"fim":ini?"vivo":"")},d.fim?"Chegou à meta em "+fmtH(Math.round((new Date(d.fim)-ini)/1000))+" 🎉":ini?"● Em prova há "+fmtH(Math.round((Date.now()-ini)/1000)):"Ainda não partiu"+(p.hora?" · partida às "+p.hora:"")),
+      eta?h("div",{class:"segeta"},h("span",{class:"k",text:"Chegada prevista"}),h("b",{text:hhmm(eta)})):null,
+      h("ol",{class:"passagens"},ini?h("li",null,h("b",{text:hhmm(ini)}),h("span",{text:"Partida"})):null,
+        ...(d.pontos||[]).map((km,i)=>{const ps=(d.passagens||[]).find(x=>x.i===i);const prev=!ps&&ini&&d.km_total?(()=>{const t=eta?eta.getTime():null;return t?new Date(ini+(t-ini)*km/d.km_total):null})():null;
+          return h("li",{class:ps?"":"futuro"},h("b",{text:ps?hhmm(ps.t):prev?"≈"+hhmm(prev):"—"}),h("span",{text:"Abastecimento "+(i+1)+" · km "+String(km).replace(".",",")}))}),
+        h("li",{class:d.fim?"":"futuro"},h("b",{text:d.fim?hhmm(d.fim):eta?"≈"+hhmm(eta):"—"}),h("span",{text:"Meta"+(d.km_total?" · km "+String(d.km_total).replace(".",","):"")})))));
+    const nomeI=h("input",{placeholder:"O teu nome",maxlength:"40",value:nomeApoio}),txtI=h("textarea",{placeholder:"Força! Estamos contigo 💪",maxlength:"200",rows:"2"});
+    root.append(h("form",{class:"segapoio",onsubmit:async e=>{e.preventDefault();const n=nomeI.value.trim(),t=txtI.value.trim();if(!n||!t){toast("Escreve o teu nome e a mensagem.");return}
+        if(Date.now()-enviado<15000){toast("Espera uns segundos antes de mandar outra.");return}
+        try{const id=await api("rpc/seguir_apoiar",{method:"POST",body:{p_token:token,p_nome:n,p_texto:t}});if(!id)throw 0;enviado=Date.now();store.set("dorsal.nomeapoio",n);nomeApoio=n;
+          fetch(FN,{method:"POST",headers:fnHeaders(),body:JSON.stringify({tipo:"apoio",token,apoio_id:id}),keepalive:true}).catch(()=>{});txtI.value="";document.activeElement.blur();toast("Mensagem enviada a "+(d.atleta||"atleta"));carregarS()}
+        catch(_){toast("Não foi possível enviar. Tenta outra vez.")}}},
+      h("strong",{text:"Manda força a "+(d.atleta||"quem corre")}),nomeI,txtI,h("button",{class:"btn primary",type:"submit",text:"Enviar mensagem"}),
+      h("span",{class:"hint",text:"Chega-lhe como notificação no telemóvel."})));
+    if(pushSuportado()&&!store.get("dorsal.seguirpush."+token))root.append(h("button",{class:"btn",type:"button",onclick:async()=>{try{const perm=await Notification.requestPermission();if(perm!=="granted")return;
+        const reg=await navigator.serviceWorker.ready;const {publicKey}=await (await fetch(FN,{headers:fnHeaders()})).json();let sub=await reg.pushManager.getSubscription();if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64u(publicKey)});
+        const j=sub.toJSON();const ok=await api("rpc/seguir_subscrever",{method:"POST",body:{p_token:token,p_endpoint:j.endpoint,p_p256dh:j.keys.p256dh,p_auth:j.keys.auth}});if(ok){store.set("dorsal.seguirpush."+token,"1");toast("Vais receber as passagens");desenharS()}}catch(_){toast("Não foi possível activar os avisos.")}},text:"🔔 Avisar-me das passagens"}));
+    if(d.apoios&&d.apoios.length)root.append(h("div",{class:"apoios"},h("strong",{text:"Mensagens ("+d.apoios.length+")"}),...d.apoios.slice(0,20).map(a=>h("p",null,h("b",{text:a.nome+": "}),a.texto))));
+    root.append(h("p",{class:"hint segrod"},"Feito com o Dorsal, a app de trail para grupos de amigos. ",h("a",{href:location.pathname,text:"Conhecer"})))};
+  desenharS();carregarS();setInterval(()=>{if(document.visibilityState==="visible")carregarS()},20000)}
+
 // ---------- membros ----------
 const linkMembro=id=>"#s=membro&m="+id;
 const fmtKm=n=>fmtN(Math.round(n*10)/10);
@@ -846,6 +932,7 @@ function detalhe(pid){const box=$("view-prova");box.replaceChildren();
       const lug=x.boleia==="oferece"?h("label",{class:"lug"},"Lugares livres ",(()=>{const s=h("select",{onchange:e=>setExtra(p.id,{lugares:+e.target.value})},...[1,2,3,4,5,6,7].map(n=>h("option",{value:String(n),text:String(n)})));s.value=String(x.lugares||3);return s})()):null;
       const casaEl=(x.boleia&&!casas[me])?casaSetter():null;
       return h("div",{class:"plano"},h("strong",{text:"O teu plano"}),ops.length?selP:h("input",{placeholder:"Percurso (por exemplo 25K)",maxlength:"40",value:x.percurso,onchange:e=>setExtra(p.id,{percurso:e.target.value.trim()})}),boleia,lug,casaEl)})():null,
+    diretoView(p),
     eTreino(p)?null:prevProva(p),
     gente,
     boleiasView(p),
@@ -1111,10 +1198,10 @@ $("novaForm").addEventListener("submit",async e=>{e.preventDefault();if(!podeMar
 
 let ultimaAberta=provaAberta();
 window.addEventListener("hashchange",()=>{const a=provaAberta();if(a&&!ultimaAberta)history.replaceState({dorsal:1},"");ultimaAberta=a;draw();window.scrollTo({top:0})});
-draw();carregar();
+if(SEGUIR)paginaSeguir(SEGUIR);else{draw();carregar()}
 const aEscrever=()=>{const a=document.activeElement;return !!a&&(a.tagName==="TEXTAREA"||(a.tagName==="INPUT"&&!/checkbox|radio|button/.test(a.type))||a.tagName==="SELECT")};
-setInterval(()=>{if(document.visibilityState==="visible"&&ONLINE&&!aEscrever())carregar()},30000);
-document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&ONLINE&&loaded)carregar()});
+setInterval(()=>{if(!SEGUIR&&document.visibilityState==="visible"&&ONLINE&&!aEscrever())carregar()},30000);
+document.addEventListener("visibilitychange",()=>{if(!SEGUIR&&document.visibilityState==="visible"&&ONLINE&&loaded)carregar()});
 if("serviceWorker" in navigator){const tinha=!!navigator.serviceWorker.controller;let recarregou=false;
   navigator.serviceWorker.addEventListener("controllerchange",()=>{if(tinha&&!recarregou){recarregou=true;location.reload()}});
   window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(r=>{document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")r.update().catch(()=>{})})}).catch(()=>{}))}

@@ -4,6 +4,8 @@
 // POST { tipo: "presenca", prova_id, membro_id }                    (cabeçalho x-grupo) -> alguém marcou Inscrito ou Vou
 // POST { tipo: "lembretes" }                                         -> lembrete na véspera (chamado pelo pg_cron)
 // POST { tipo: "treino", prova_id, membro_id }                     (cabeçalho x-grupo) -> treino novo marcado
+// POST { tipo: "direto", direto_id, ponto }                         (cabeçalho x-grupo) -> partida, passagem ou chegada de um atleta em direto
+// POST { tipo: "apoio", token, apoio_id }                            -> mensagem de apoio para o atleta (sem grupo; usa o token do link)
 // POST { tipo: "semana", teste? }                                    -> resumo da semana, domingo à noite (pg_cron); teste=true só pré-visualiza
 import webpush from "npm:web-push@3.6.7";
 
@@ -183,6 +185,54 @@ async function treino(grupo: string, prova_id: string, membro_id: string) {
   return { enviadas: await enviar(subs || [], payload), total: (subs || []).length };
 }
 
+const hhmm = (iso: string) => new Date(iso).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Lisbon" });
+const dur = (s: number) => `${Math.floor(s / 3600)}h${String(Math.floor(s % 3600 / 60)).padStart(2, "0")}`;
+
+async function emDireto(grupo: string, direto_id: string, ponto: string) {
+  if (!UUID.test(direto_id) || !/^(partida|meta|\d{1,2})$/.test(ponto)) return { erro: "pedido inválido" };
+  const d = (await db(`direto?id=eq.${direto_id}&grupo=eq.${grupo}&select=id,membro_id,prova_id,token,inicio,fim,km_total,previsao_s,pontos,passagens`))?.[0];
+  if (!d || !d.inicio) return { enviadas: 0, motivo: "sem direto" };
+  const agora = Date.now(), recente = (iso: string) => iso && agora - new Date(iso).getTime() < 20 * 60 * 1000;
+  const ini = new Date(d.inicio).getTime();
+  const [au, pv] = await Promise.all([nomeMembro(d.membro_id), nomeProva(d.prova_id)]);
+  let body = "";
+  if (ponto === "partida") {
+    if (!recente(d.inicio)) return { enviadas: 0, motivo: "antigo" };
+    body = `${au} partiu às ${hhmm(d.inicio)}` + (d.previsao_s ? `. Chegada prevista ≈ ${hhmm(new Date(ini + d.previsao_s * 1000).toISOString())}` : "");
+  } else if (ponto === "meta") {
+    if (!d.fim || !recente(d.fim)) return { enviadas: 0, motivo: "antigo" };
+    body = `${au} chegou à meta em ${dur(Math.round((new Date(d.fim).getTime() - ini) / 1000))} 🎉`;
+  } else {
+    const i = Number(ponto), ps = (d.passagens || []).find((x: { i: number; t: string }) => x.i === i), km = Number((d.pontos || [])[i]);
+    if (!ps || !recente(ps.t) || !km) return { enviadas: 0, motivo: "sem passagem recente" };
+    const el = (new Date(ps.t).getTime() - ini) / 1000, kt = Number(d.km_total) || 0;
+    const eta = kt > km ? new Date(ini + el * Math.pow(kt / km, 1.06) * 1000).toISOString() : null;
+    body = `${au} passou no abastecimento ${i + 1} (km ${String(km).replace(".", ",")}) às ${hhmm(ps.t)}` + (eta ? `. Chegada prevista ≈ ${hhmm(eta)}` : "");
+  }
+  if (!(await primeiraVez(`direto:${d.id}:${ponto}`))) return { enviadas: 0, motivo: "já avisado" };
+  const [g, subs, seg] = await Promise.all([nomeGrupo(grupo),
+    db(`subscricoes?grupo=eq.${grupo}&membro_id=neq.${d.membro_id}&select=endpoint,p256dh,auth`),
+    db(`seguidores_push?direto_id=eq.${d.id}&select=endpoint,p256dh,auth`)]);
+  const title = `Em direto: ${pv?.nome || "prova"}`;
+  const a = await enviar(subs || [], JSON.stringify({ title: title + (g ? " · " + g : ""), body, url: `./?g=${grupo}#p=${encodeURIComponent(d.prova_id)}`, tag: `direto-${d.id}` }));
+  const b = await enviar((seg || []).map((x: Sub) => x), JSON.stringify({ title, body, url: `./?seguir=${d.token}`, tag: `direto-${d.id}` }));
+  return { enviadas: a + b };
+}
+
+async function apoio(token: string, apoio_id: number) {
+  if (!/^[0-9a-f]{16,40}$/.test(token) || !Number.isInteger(apoio_id)) return { erro: "pedido inválido" };
+  const d = (await db(`direto?token=eq.${token}&select=id,membro_id,grupo,prova_id`))?.[0];
+  if (!d) return { enviadas: 0, motivo: "sem direto" };
+  const desde = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const m = await db(`apoios?id=eq.${apoio_id}&direto_id=eq.${d.id}&notificado=eq.false&criado_em=gte.${desde}&select=nome,texto`, {
+    method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ notificado: true }),
+  });
+  if (!m || !m.length) return { enviadas: 0, motivo: "nada a notificar" };
+  const subs = await db(`subscricoes?grupo=eq.${d.grupo}&membro_id=eq.${d.membro_id}&select=endpoint,p256dh,auth`);
+  const payload = JSON.stringify({ title: `💬 Apoio de ${m[0].nome}`, body: String(m[0].texto).slice(0, 200), url: `./?g=${d.grupo}#p=${encodeURIComponent(d.prova_id)}`, tag: `apoio-${d.id}-${apoio_id}` });
+  return { enviadas: await enviar(subs || [], payload) };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
@@ -194,9 +244,11 @@ Deno.serve(async (req) => {
     const tipo = body.tipo || (body.comentario_id ? "comentario" : "");
     if (tipo === "lembretes") return json(await lembretes());
     if (tipo === "semana") return json(await semana(body.teste === true));
+    if (tipo === "apoio") return json(await apoio(String(body.token || ""), Number(body.apoio_id)));
     const grupo = (req.headers.get("x-grupo") || "").toLowerCase();
     if (!/^[a-z0-9]{6,40}$/.test(grupo)) return json({ erro: "pedido inválido" }, 400);
     if (tipo === "comentario" && Number.isInteger(body.comentario_id)) return json(await comentario(grupo, body.comentario_id));
+    if (tipo === "direto") return json(await emDireto(grupo, String(body.direto_id || ""), String(body.ponto ?? "")));
     if (tipo === "treino") return json(await treino(grupo, String(body.prova_id || ""), String(body.membro_id || "")));
     if (tipo === "presenca") return json(await presenca(grupo, String(body.prova_id || ""), String(body.membro_id || "")));
     return json({ erro: "pedido inválido" }, 400);

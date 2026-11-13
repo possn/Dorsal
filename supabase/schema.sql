@@ -267,3 +267,9 @@ grant update (objetivo_km) on public.membros to anon, authenticated;
 -- ---------- concelho de partida para boleias ----------
 alter table public.membros add column if not exists casa text check (casa is null or char_length(casa) <= 80);  -- "Concelho|Distrito"
 grant update (casa) on public.membros to anon, authenticated;
+
+-- ---------- apoio em direto ----------
+-- Ver a migração "apoio_em_direto": tabelas direto (atleta em prova; token para o link público),
+-- apoios (mensagens de quem segue) e seguidores_push (notificações de quem segue, sem conta),
+-- e as funções públicas seguir_ver, seguir_apoiar e seguir_subscrever (SECURITY DEFINER, acesso só com o token).
+-- admin_novo_codigo passou a mudar também direto.grupo.
