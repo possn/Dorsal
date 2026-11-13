@@ -568,3 +568,10 @@ body.modo-seguir>*:not(#seguir):not(#toast){display:none !important}
 .dapagar{margin-top:6px;font-size:.8rem}
 .dtemplates{display:flex;flex-wrap:wrap;gap:6px}
 .dform{margin-top:8px}
+.calsub .calc{margin:12px 0}.calsub .row{gap:8px}.calsub input{flex:1;min-width:0;font-size:.8rem}.calsub ol{padding-left:20px}
+.perfil .marca{stroke:var(--fg);stroke-width:1.5;stroke-dasharray:4 4;opacity:.6}
+.perfil .marcatxt{font-size:15px;font-weight:800;fill:var(--fg)}
+.rotarow{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;font-size:.85rem}
+.rotarow label.linkbtn{font-weight:600;color:var(--accent);cursor:pointer;text-transform:none;letter-spacing:0;font-size:.85rem}
+.perfilbox{margin-top:4px}
+.prevcampos .rotarow label.linkbtn{display:inline;color:var(--accent)}.rotarow .hint{white-space:nowrap}.rotarow button.linkbtn{font-size:.85rem}

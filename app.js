@@ -320,6 +320,18 @@ async function partilharResultado(p,id){const x=exDe(p.id,id);toast("A preparar 
   try{if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:p.nome});return}}catch(e){if(e&&e.name==="AbortError")return}
   const a=h("a",{href:URL.createObjectURL(blob),download:nomeF});document.body.append(a);a.click();a.remove();toast("Imagem descarregada")}
 
+// ---------- calendário subscrito ----------
+function calSubscrever(){const box=h("article",{class:"sec calsub"});box.append(h("h1",{text:"Calendário no telemóvel"}),
+    h("p",{class:"lead",text:"Junta ao calendário do telemóvel as provas em que estás marcado e os treinos do grupo. Fica sempre atualizado: se marcares uma prova nova aqui, aparece lá sozinha."}));
+  if(!grupo||!me){box.append(h("p",{class:"hint",text:"Entra num grupo e escolhe o teu nome primeiro."}));return box}
+  const https=CFG.supabaseUrl.replace(/\/$/,"")+"/functions/v1/calendario?m="+me,webcal=https.replace(/^https:/,"webcal:");
+  box.append(h("div",{class:"calc"},h("h2",{text:"iPhone, iPad ou Mac"}),h("p",{class:"hint",text:"Toca no botão e confirma \"Assinar\". O calendário aparece como \"Dorsal · "+(grupoNome||"grupo")+"\"."}),
+      h("a",{class:"btn primary",href:webcal,text:"Subscrever no calendário"})),
+    h("div",{class:"calc"},h("h2",{text:"Google Calendar (Android)"}),h("ol",null,h("li",{text:"Copia o endereço abaixo."}),h("li",{text:"Num computador, abre calendar.google.com, carrega no + ao lado de \"Outros calendários\" e escolhe \"A partir do URL\"."}),h("li",{text:"Cola o endereço. Em poucos minutos aparece também no telemóvel."})),
+      h("div",{class:"row"},h("input",{readonly:true,value:https,onclick:e=>e.target.select(),"aria-label":"Endereço do calendário"}),h("button",{class:"btn small",type:"button",onclick:()=>copiar(https),text:"Copiar"}))),
+    h("p",{class:"hint",text:"Este endereço é teu: mostra as tuas provas marcadas, o teu estado e os treinos do grupo. Não o publiques. O Google e a Apple actualizam o calendário de algumas em algumas horas, por isso uma mudança pode demorar a aparecer."}));
+  return box}
+
 // ---------- privacidade ----------
 let apagarConf="";
 async function exportarDados(){if(!grupo||!me)return;toast("A juntar os teus dados…");
@@ -382,6 +394,11 @@ const calorMemo={};
 function carregarCalor(p,c){const k=p.id;if(calorMemo[k])return;calorMemo[k]={estado:"a"};
   fetch("https://api.open-meteo.com/v1/forecast?latitude="+c[0]+"&longitude="+c[1]+"&hourly=temperature_2m,relative_humidity_2m&timezone=Europe%2FLisbon&start_date="+p.data+"&end_date="+(()=>{const d=parseD(p.data);d.setDate(d.getDate()+1);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")})())
     .then(r=>r.ok?r.json():Promise.reject()).then(j=>{calorMemo[k]={estado:"ok",h:j.hourly};draw()}).catch(()=>{calorMemo[k]={estado:"erro"};draw()})}
+function rotaDe(pid){try{return JSON.parse(store.get("dorsal.rota."+pid)||"null")}catch(_){return null}}
+function kmeRota(r){const c=DorsalGPX.descodificar(r.pontos),el=r.elev?r.elev.split(",").map(Number):[];const x=[0];for(let i=1;i<c.length;i++)x.push(x[i-1]+DorsalGPX.dist(c[i-1],c[i])/1000);
+  const up=[0];let ref=el[0],acc=0;for(let i=1;i<el.length;i++){const v=el[i];if(v-ref>=3){acc+=v-ref;ref=v}else if(ref-v>=3)ref=v;up.push(acc)}
+  const kme=x.map((k,i)=>k+(up[i]||0)/100);return {c,el,x,up,kme,km:x[x.length-1],dp:up[up.length-1]||0}}
+function interp(xs,ys,v){if(v<=xs[0])return ys[0];for(let i=1;i<xs.length;i++)if(xs[i]>=v){const f=(v-xs[i-1])/((xs[i]-xs[i-1])||1);return ys[i-1]+f*(ys[i]-ys[i-1])}return ys[ys.length-1]}
 function prevProva(p){if(!podeMarcar()||!me||!pres[p.id]||!pres[p.id][me])return null;
   const ck="dorsal.prev."+p.id;let cfg={};try{cfg=JSON.parse(store.get(ck)||"{}")}catch(_){}
   const x=exDe(p.id,me);const kmP=(()=>{const m=String(x.percurso||"").match(/(\d+(?:[.,]\d+)?)\s*k/i)||String(p.distancias||"").match(/(\d+(?:[.,]\d+)?)\s*k/i);return m?m[1].replace(",","."):""})();
@@ -393,7 +410,14 @@ function prevProva(p){if(!podeMarcar()||!me||!pres[p.id]||!pres[p.id][me])return
     h("label",null,"Km",inp("km",{inputmode:"decimal",placeholder:kmP||"25"})),
     h("label",null,"D+ (m)",inp("dp",{inputmode:"numeric",placeholder:"1200"})),
     h("label",null,"Partida",inp("hora",{type:"time",placeholder:"08:00",value:val("hora")||p.hora||""})),
-    h("label",{class:"full"},"Abastecimentos ao km (opcional)",inp("abs",{inputmode:"decimal",placeholder:"8; 15; 22"})));
+    h("label",{class:"full"},"Abastecimentos ao km (opcional)",inp("abs",{inputmode:"decimal",placeholder:"8; 15; 22"})),
+    (()=>{const r=rotaDe(p.id);const fi=h("input",{type:"file",class:"vh",id:"rotaF-"+p.id});
+      fi.addEventListener("change",async()=>{const f=fi.files[0];if(!f)return;try{const t=await f.text();const g=DorsalGPX.ler(t);if(!g.elev)toast("O GPX não tem altitude: uso só a distância.");
+          store.set("dorsal.rota."+p.id,JSON.stringify({pontos:g.pontos,elev:g.elev,km:g.km,dp:g.dplus,nome:f.name.slice(0,60)}));
+          if(!cfg.km)cfg.km=String(g.km).replace(".",",");if(!cfg.dp&&g.dplus)cfg.dp=String(g.dplus);guardar();toast("Percurso carregado: "+String(g.km).replace(".",",")+" km, "+g.dplus+" m D+");draw()}catch(e){toast(e.message||"Não consegui ler o GPX.")}});
+      return h("div",{class:"full rotarow"},fi,r?h("span",{class:"hint",text:"✓ Percurso: "+String(r.km).replace(".",",")+" km · "+r.dp+" m D+ "}):null,
+        h("label",{class:"linkbtn",for:"rotaF-"+p.id,text:r?"Trocar GPX":"＋ GPX do percurso (passagens mais exactas)"}),
+        r?h("button",{class:"linkbtn",type:"button",onclick:()=>{store.set("dorsal.rota."+p.id,null);draw()},text:"Retirar"}):null)})());
   const out=h("div",{class:"prevout"});
   function desenhar(){out.replaceChildren();
     const km=parseFloat(String(val("km")||kmP).replace(",","."))||0,dp=parseInt(val("dp"),10)||0,hora=val("hora")||p.hora||"";
@@ -405,8 +429,13 @@ function prevProva(p){if(!podeMarcar()||!me||!pres[p.id]||!pres[p.id][me])return
       if(hora){const [H,M]=hora.split(":").map(Number);const t0=parseD(p.data);t0.setHours(H,M,0,0);const hh=d=>String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
         const abs=String(val("abs")||"").split(/[;\s]+/).map(v=>parseFloat(v.replace(",","."))).filter(v=>v>0&&v<km).sort((a,b)=>a-b);
         const pts=[...abs.map((k,i)=>["Abast. "+(i+1)+" · km "+String(k).replace(".",","),k]),["Meta · km "+String(km).replace(".",","),km]];
-        out.append(h("ol",{class:"passagens"},h("li",null,h("b",{text:hora}),h("span",{text:"Partida"})),...pts.map(([n,k])=>h("li",null,h("b",{text:hh(new Date(t0.getTime()+pv.med*1000*k/km))}),h("span",{text:n})))));
-        if(abs.length)out.append(h("p",{class:"hint",text:"As horas de passagem assumem que o D+ está distribuído por igual pelo percurso."}))}}
+        const R=(()=>{const r=rotaDe(p.id);if(!r)return null;try{return kmeRota(r)}catch(_){return null}})();
+        const frac=k=>{if(R&&R.km>0){const kk=k*R.km/km;return interp(R.x,R.kme,kk)/R.kme[R.kme.length-1]}return k/km};
+        const dpSeg=(a,b)=>R?Math.round(interp(R.x,R.up,b*R.km/km)-interp(R.x,R.up,a*R.km/km)):null;
+        let ant=0;
+        out.append(h("ol",{class:"passagens"},h("li",null,h("b",{text:hora}),h("span",{text:"Partida"})),...pts.map(([n,k])=>{const dps=dpSeg(ant,k);ant=k;return h("li",null,h("b",{text:hh(new Date(t0.getTime()+pv.med*1000*frac(k)))}),h("span",{text:n+(dps!=null?" · +"+dps+" m":"")}))})));
+        if(R&&R.el.length===R.c.length&&R.el.length>1){const svg=DorsalGPX.perfilSVG([{coords:R.c,elev:R.el.join(","),cor:"var(--accent)"}],abs.map((k,i)=>({km:k*R.km/km,t:"A"+(i+1)})));if(svg)out.append(h("div",{class:"perfilbox"},svg))}
+        out.append(h("p",{class:"hint",text:R?"As horas de passagem usam o km-esforço de cada troço do GPX: mais D+ num troço, mais tempo.":abs.length?"As horas de passagem assumem que o D+ está distribuído por igual. Carrega o GPX do percurso para as tornar mais exactas.":""}))}}
     else out.append(h("p",{class:"hint",text:"Para prever o teu tempo, regista pelo menos uma prova feita com km, D+ e tempo (em O grupo, Provas feitas)."}));
     // calor
     const dias=Math.round((parseD(p.data)-hoje())/864e5),c=coordsDe(p),durH=Math.max(1,(dur||km*600)/3600);
@@ -1052,7 +1081,7 @@ function draw(){
 
 // ---------- secções (menu lateral) ----------
 const SECOES=window.DORSAL_SECOES||[];
-function secAtual(){const m=location.hash.match(/[#&]s=([a-z-]+)/);return m&&(m[1]==="estatisticas"||m[1]==="membros"||m[1]==="membro"||m[1]==="privacidade"||SECOES.some(x=>x.id===m[1]))?m[1]:null}
+function secAtual(){const m=location.hash.match(/[#&]s=([a-z-]+)/);return m&&(m[1]==="estatisticas"||m[1]==="membros"||m[1]==="membro"||m[1]==="privacidade"||m[1]==="calendario-tel"||SECOES.some(x=>x.id===m[1]))?m[1]:null}
 let secDesenhada=null;
 function comRefs(texto,sid){const out=[];let i=0;String(texto).replace(/\[(\d+)\]/g,(m,n,pos)=>{out.push(texto.slice(i,pos));
   out.push(h("sup",null,h("a",{href:"#",onclick:e=>{e.preventDefault();const f=document.getElementById("f-"+sid+"-"+n);const d=f&&f.closest("details");if(d)d.open=true;if(f){f.classList.add("piscar");setTimeout(()=>f.classList.remove("piscar"),1600)}if(f)f.scrollIntoView({behavior:"smooth",block:"center"})},"aria-label":"Fonte "+n,text:"["+n+"]"})));i=pos+m.length;return m});
@@ -1099,6 +1128,7 @@ function bloco(b,sid){switch(b.t){
   case "calc-abast":return calcAbast(sid);
   default:return null}}
 function desenharSec(sid){if(sid==="estatisticas"){secDesenhada=null;$("pg-sec").replaceChildren(estatisticas());return}
+  if(sid==="calendario-tel"){secDesenhada=null;$("pg-sec").replaceChildren(calSubscrever());return}
   if(sid==="privacidade"){secDesenhada=null;$("pg-sec").replaceChildren(privacidade());return}
   if(sid==="membros"){secDesenhada=null;$("pg-sec").replaceChildren(membrosView());return}
   if(sid==="membro"){secDesenhada=null;const m=location.hash.match(/[#&]m=([0-9a-z-]{1,40})/i);$("pg-sec").replaceChildren(perfil(m?m[1]:me));return}if(secDesenhada===sid)return;secDesenhada=sid;const S=SECOES.find(x=>x.id===sid);const box=$("pg-sec");
@@ -1116,7 +1146,7 @@ function abrirMenu(abrir){$("menu").hidden=!abrir;$("scrim").hidden=!abrir;$("me
 function desenharMenu(){const cur=secAtual()||"provas";
   $("menuList").replaceChildren(
     h("li",null,h("a",{href:"#",onclick:e=>{e.preventDefault();history.pushState(null,"",location.pathname+location.search);abrirMenu(false);draw();window.scrollTo({top:0})},"aria-current":cur==="provas"?"page":null},ic("provas"),"Provas")),
-    ...(ONLINE?[h("li",{class:"sep"}),h("li",null,h("a",{href:"#s=estatisticas",onclick:()=>abrirMenu(false),"aria-current":cur==="estatisticas"?"page":null},ic("estatisticas"),"Estatísticas")),h("li",null,h("a",{href:"#s=membros",onclick:()=>abrirMenu(false),"aria-current":(cur==="membros"||cur==="membro")?"page":null},ic("membros"),"Membros")),h("li",{class:"lbl",text:"Grupos"}),
+    ...(ONLINE?[h("li",{class:"sep"}),h("li",null,h("a",{href:"#s=estatisticas",onclick:()=>abrirMenu(false),"aria-current":cur==="estatisticas"?"page":null},ic("estatisticas"),"Estatísticas")),h("li",null,h("a",{href:"#s=calendario-tel",onclick:()=>abrirMenu(false),"aria-current":cur==="calendario-tel"?"page":null},ic("calendario"),"Calendário no telemóvel")),h("li",null,h("a",{href:"#s=membros",onclick:()=>abrirMenu(false),"aria-current":(cur==="membros"||cur==="membro")?"page":null},ic("membros"),"Membros")),h("li",{class:"lbl",text:"Grupos"}),
       ...gruposConhecidos().map(g=>h("li",null,h("a",{href:"#",onclick:e=>{e.preventDefault();abrirMenu(false);history.pushState(null,"",location.pathname);if(g.c!==grupo)mudarGrupo(g.c);else draw()},"aria-current":g.c===grupo?"true":null},h("span",{class:"ic",text:g.c===grupo?"●":"○"}),g.n||"Grupo sem nome"))),
       h("li",null,h("a",{href:"#",onclick:e=>{e.preventDefault();abrirMenu(false);history.pushState(null,"",location.pathname);entrarAberto=true;draw();window.scrollTo({top:0});$("criarNome").focus()}},ic("mais"),"Criar ou entrar noutro grupo"))]:[]),
     h("li",{class:"sep"}),

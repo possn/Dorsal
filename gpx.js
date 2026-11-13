@@ -86,7 +86,7 @@
   }
 
   // Perfil de altitude em SVG; series = [{coords, elev, cor}]
-  function perfilSVG(series) {
+  function perfilSVG(series, marcas) {
     const W = 600, H = 210, P = { l: 66, r: 12, t: 14, b: 34 };
     const dados = series.map(s => {
       const el = s.elev ? s.elev.split(",").map(Number) : [];
@@ -115,6 +115,11 @@
       const linha = s.x.map((xx, i) => `${i ? "L" : "M"}${xK(xx).toFixed(1)},${yE(s.el[i]).toFixed(1)}`).join("");
       if (dados.length === 1) add("path", { d: `${linha}L${xK(s.x[s.x.length - 1]).toFixed(1)},${H - P.b}L${xK(0)},${H - P.b}Z`, class: "area" });
       add("path", { d: linha, class: "linha", stroke: s.cor || "currentColor" });
+    });
+    (marcas || []).forEach((m) => {
+      if (!(m.km > 0 && m.km < maxX)) return;
+      add("line", { x1: xK(m.km), x2: xK(m.km), y1: P.t, y2: H - P.b, class: "marca" });
+      add("text", { x: xK(m.km) + 4, y: P.t + 16, class: "marcatxt" }, m.t);
     });
     return svg;
   }
