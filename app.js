@@ -512,11 +512,16 @@ function slidesAno(id,ano,D){const nome=nomeDe(id),fam=getComputedStyle(document
   if(D.g.ativos>1)S.push(g=>{fundo(g,"#ee5a0f","#17211b");k(g,(grupoNome||"O teu grupo")+" em "+ano,300,"#17211b");let y=560;
     for(const [v,l] of [[String(D.g.n),"provas com gente do grupo"],[km(D.g.km),"km somados"],[km(D.g.d),"metros de D+ somados"],[String(D.g.ativos),"membros com provas feitas"]]){txt(g,v,80,y,170,"#fff",800);txt(g,l,86,y+60,44,"#fff",600);y+=290}
     txt(g,"Tu fizeste "+Math.round(100*D.t.km/Math.max(1,D.g.km))+"% dos km.",80,y+20,46,"#17211b",700);rodape(g)});
+  if(D.fotos&&D.fotos.length)S.push(g=>{fundo(g,"#17211b","#0b100d");k(g,"Momentos de "+ano,300);const n=D.fotos.length,cols=n===1?1:2,gap=24,x0=80,y0=380,wT=W-160,cw=(wT-gap*(cols-1))/cols,rows=Math.ceil(n/cols),ch=Math.min(cw*1.25,(1300-gap*(rows-1))/rows);
+    D.fotos.forEach((im,i)=>{const cx=x0+(i%cols)*(cw+gap),cy=y0+Math.floor(i/cols)*(ch+gap),s=Math.max(cw/im.width,ch/im.height),sw=cw/s,sh=ch/s;
+      g.save();g.beginPath();if(g.roundRect)g.roundRect(cx,cy,cw,ch,28);else g.rect(cx,cy,cw,ch);g.clip();g.drawImage(im,(im.width-sw)/2,(im.height-sh)/2,sw,sh,cx,cy,cw,ch);g.restore()});rodape(g)});
   S.push(g=>{fundo(g,"#17211b","#2e6b43");k(g,"Até "+(+ano+1),300);wrap(g,"Qual é a próxima?",80,520,W-160,150,"#fff",800,150);
     wrap(g,"Marca as provas de "+(+ano+1)+" no Dorsal e vê quem vai contigo.",80,900,W-160,56,"rgba(255,255,255,.8)",500,70);rodape(g)});
   return S}
 let historia=null;
 async function abrirAno(id,ano){const D=dadosAno(id,ano);if(!D){toast("Ainda não há provas feitas em "+ano+" para contar a história.");return}
+  D.fotos=[];try{const ids=new Set(feitasDe(id,ano).map(p=>p.id));const fs=((await api("fotos?membro_id=eq."+id+"&select=caminho,prova_id&order=criado_em.desc&limit=40"))||[]).filter(f=>ids.has(f.prova_id)).slice(0,4);
+    D.fotos=(await Promise.all(fs.map(f=>new Promise(r=>{const i=new Image();i.crossOrigin="anonymous";i.onload=()=>r(i);i.onerror=()=>r(null);i.src=urlFoto(f)})))).filter(Boolean)}catch(_){D.fotos=[]}
   try{await document.fonts.load("800 80px "+(getComputedStyle(document.documentElement).getPropertyValue("--display").trim()||"sans-serif").split(",")[0])}catch(_){}
   const S=slidesAno(id,ano,D);const c=document.createElement("canvas");c.width=1080;c.height=1920;const g=c.getContext("2d");
   let i=0,timer=null;const barras=h("div",{class:"hbarras"},...S.map(()=>h("span",null,h("i"))));
@@ -529,11 +534,11 @@ async function abrirAno(id,ano){const D=dadosAno(id,ano);if(!D){toast("Ainda nã
   const ir=n=>{if(n<0)n=0;if(n>=S.length){fechar();return}i=n;desenhar()};
   const fechar=()=>{clearTimeout(timer);ov.remove();document.body.style.overflow="";document.removeEventListener("keydown",tecla);historia=null};
   const tecla=e=>{if(e.key==="Escape")fechar();if(e.key==="ArrowRight")ir(i+1);if(e.key==="ArrowLeft")ir(i-1)};
-  const blobDe=k=>new Promise(r=>{const cc=document.createElement("canvas");cc.width=1080;cc.height=1920;S[k](cc.getContext("2d"));cc.toBlob(r,"image/png")});
+  const blobDe=k=>new Promise((r,j)=>{try{const cc=document.createElement("canvas");cc.width=1080;cc.height=1920;S[k](cc.getContext("2d"));cc.toBlob(b=>b?r(b):j(new Error("vazio")),"image/png")}catch(e){j(e)}});
   const enviar=async files=>{try{if(navigator.canShare&&navigator.canShare({files})){await navigator.share({files,title:"O meu "+ano+" no trail"});return}}catch(e){if(e&&e.name==="AbortError")return}
     for(const f of files){const a=h("a",{href:URL.createObjectURL(f),download:f.name});document.body.append(a);a.click();a.remove()}toast(files.length>1?"Imagens descarregadas":"Imagem descarregada")};
-  const partilharSlide=async()=>{clearTimeout(timer);enviar([new File([await blobDe(i)],"dorsal-"+ano+"-"+(i+1)+".png",{type:"image/png"})])};
-  const partilharTodas=async()=>{clearTimeout(timer);const fs=[];for(let k=0;k<S.length;k++)fs.push(new File([await blobDe(k)],"dorsal-"+ano+"-"+(k+1)+".png",{type:"image/png"}));enviar(fs)};
+  const partilharSlide=async()=>{clearTimeout(timer);try{enviar([new File([await blobDe(i)],"dorsal-"+ano+"-"+(i+1)+".png",{type:"image/png"})])}catch(_){toast("Não foi possível preparar esta imagem.")}};
+  const partilharTodas=async()=>{clearTimeout(timer);const fs=[];for(let k=0;k<S.length;k++){try{fs.push(new File([await blobDe(k)],"dorsal-"+ano+"-"+(k+1)+".png",{type:"image/png"}))}catch(_){}}if(fs.length)enviar(fs);else toast("Não foi possível preparar as imagens.")};
   document.body.append(ov);document.body.style.overflow="hidden";document.addEventListener("keydown",tecla);historia=ov;desenhar()}
 
 // ---------- boleias automáticas ----------

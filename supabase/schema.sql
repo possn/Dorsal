@@ -281,4 +281,4 @@ grant update (casa) on public.membros to anon, authenticated;
 
 -- ---------- fotos das provas ----------
 -- Bucket público "fotos" (JPEG até 450 KB) e tabela fotos (grupo, prova_id, membro_id, caminho).
--- Envio e remoção só pela função "fotos" (valida o membro no grupo; máx. 6 por membro e prova, 3000 por grupo).
+-- admin_novo_codigo muda também fotos.grupo. Envio e remoção só pela função "fotos" (valida o membro no grupo; máx. 6 por membro e prova, 3000 por grupo).
