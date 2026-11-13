@@ -16,7 +16,7 @@ let grupo=null,grupoNome="",grupoLogo="",me=null;
 let extra={},meteo={},passadas=[],nCom={},conv={},maxCom={},novas={},temTrilho=new Set(),trilhosP={},mapas={};
 const lidas=()=>{try{return JSON.parse(store.get("dorsal.lidas."+grupo)||"null")}catch(_){return null}},guardarLidas=L=>store.set("dorsal.lidas."+grupo,JSON.stringify(L));
 function marcarLida(pid,id){if(!id)return;const L=lidas()||{};if((L[pid]||0)<id){L[pid]=id;guardarLidas(L)}if(novas[pid]){delete novas[pid]}}
-let objetivos={},casas={};let provas=[],membros={},pres={},cliques={},loaded=false;
+let objetivos={},casas={},desafios=[];let provas=[],membros={},pres={},cliques={},loaded=false;
 let histTodas=false,vistaCal=store.get("dorsal.vista")==="cal",calMes=null,calDia=null;
 let filtroReg=store.get("dorsal.regiao")||"",filtroDist=store.get("dorsal.distrito")||"";
 let casa=null;try{casa=JSON.parse(store.get("dorsal.casa")||"null")}catch(_){}
@@ -67,7 +67,7 @@ async function carregar(){
     const hoje=hojeISO();
     const reqs=[api("provas?select=*&data=gte."+hoje+"&order=data.asc,nome.asc")];
     if(grupo)reqs.push(api("grupos?select=nome,logo&codigo=eq."+grupo),api("membros?select=id,nome,objetivo_km,casa&order=nome.asc"),api("presencas?select=membro_id,prova_id,estado,percurso,boleia,lugares,tempo,km,dplus"),api("cliques?select=prova_id"),api("comentarios?select=prova_id,id,membro_id").catch(()=>[]),api("trilhos?select=prova_id,membro_id").catch(()=>[]));
-    const [ps,gs,ms,pr,cl,co,tr]=await Promise.all(reqs);if(grupo)verAdmin().then(()=>{if(!$("editarGrupo").hidden)painelAdmin()});if(tr){temTrilho=new Set(tr.map(x=>x.prova_id+"|"+x.membro_id))}
+    const [ps,gs,ms,pr,cl,co,tr]=await Promise.all(reqs);if(grupo)verAdmin().then(()=>{if(!$("editarGrupo").hidden)painelAdmin()});if(grupo)api("desafios?select=*&order=fim.asc").then(r=>{const n=JSON.stringify(r||[]);if(n!==JSON.stringify(desafios)){desafios=r||[];draw()}}).catch(()=>{});if(tr){temTrilho=new Set(tr.map(x=>x.prova_id+"|"+x.membro_id))}
     provas=ps||[];
     if(grupo){
       if(!gs||!gs.length){status("Esse código de grupo não existe. Confirma o link que recebeste.");esquecerGrupo(grupo);store.set("dorsal.grupo",null);grupo=null;membros={};pres={};}
@@ -629,6 +629,47 @@ async function paginaSeguir(token){document.body.classList.add("modo-seguir");co
     root.append(h("p",{class:"hint segrod"},"Feito com o Dorsal, a app de trail para grupos de amigos. ",h("a",{href:location.pathname,text:"Conhecer"})))};
   desenharS();carregarS();setInterval(()=>{if(document.visibilityState==="visible")carregarS()},20000)}
 
+// ---------- desafios do grupo ----------
+const MED={km:["km","km"],dplus:["m D+","metros de D+"],provas:["provas","provas"]};
+function valorDesafio(d,id){let v=0;for(const p of passadas){if(eTreino(p)||p.data<d.inicio||p.data>d.fim||!foiA(p.id,id))continue;const x=exDe(p.id,id);v+=d.medida==="km"?(+x.km||0):d.medida==="dplus"?(+x.dplus||0):1}return v}
+function desafioCard(d){const ids=Object.keys(membros),vals=ids.map(id=>[id,valorDesafio(d,id)]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
+  const meta=+d.meta,hojeS=hojeISO(),acabou=hojeS>d.fim,comecou=hojeS>=d.inicio,dias=Math.max(0,Math.round((parseD(d.fim)-hoje())/864e5));
+  const fmtV=v=>d.medida==="provas"?String(v):fmtN(Math.round(v));
+  let pct,linha;
+  if(d.modo==="grupo"){const tot=vals.reduce((a,x)=>a+x[1],0);pct=Math.min(1,tot/meta);linha=fmtV(tot)+" de "+fmtV(meta)+" "+MED[d.medida][0]}
+  else{const ok=vals.filter(x=>x[1]>=meta).length,n=ids.length||1;pct=ok/n;linha=ok+" de "+n+" já fizeram "+fmtV(meta)+" "+MED[d.medida][0]}
+  const feito=pct>=1;
+  const podeApagar=souAdmin()||d.criado_por===me;
+  const card=h("div",{class:"desafio"+(feito?" feito":"")+(acabou&&!feito?" acabou":"")},
+    h("div",{class:"dcab"},h("strong",{text:d.titulo}),h("span",{class:"hint",text:feito?"Cumprido 🏆":acabou?"Terminou":!comecou?"Começa a "+dataLonga(d.inicio):dias===0?"Último dia":"Faltam "+dias+" dias"})),
+    h("div",{class:"dbarra"},h("i",{style:"width:"+Math.round(pct*100)+"%"})),
+    h("div",{class:"dlinha"},h("b",{text:Math.round(pct*100)+"%"}),h("span",{text:" · "+linha})),
+    vals.length?h("div",{class:"dcontrib"},...vals.slice(0,d.modo==="cada"?ids.length:4).map(([id,v])=>h("span",{class:"chip-p"+(d.modo==="cada"&&v>=meta?" ok":"")},nomeDe(id)+" "+fmtV(v)+(d.medida==="provas"?"":" "+MED[d.medida][0])))):h("p",{class:"hint",text:"Ainda ninguém contribuiu. As provas feitas entre "+dataLonga(d.inicio)+" e "+dataLonga(d.fim)+" contam automaticamente."}),
+    podeApagar?h("button",{class:"linkbtn dapagar",type:"button",onclick:async ev=>{const b=ev.currentTarget;if(b.dataset.c!=="1"){b.dataset.c="1";b.textContent="Confirmar: apagar desafio";return}
+      try{await api("desafios?id=eq."+d.id,{method:"DELETE"});desafios=desafios.filter(x=>x.id!==d.id);draw()}catch(_){toast("Não foi possível apagar.")}},text:"Apagar"}):null);
+  return card}
+let novoDesafio=false;
+function desafiosView(){if(!grupo||!me)return null;const ativos=desafios.filter(d=>d.fim>=hojeISO()||(hojeISO()<=(()=>{const x=parseD(d.fim);x.setDate(x.getDate()+30);return x.toISOString().slice(0,10)})()));
+  const box=h("section",{class:"desafios"},h("div",{class:"row between"},h("h3",{text:"Desafios do grupo"}),!novoDesafio?h("button",{class:"btn small",type:"button",onclick:()=>{novoDesafio=true;draw()},text:"+ Novo"}):null));
+  if(novoDesafio)box.append(formDesafio());
+  if(!ativos.length&&!novoDesafio){box.append(h("p",{class:"hint",text:"Metas para o grupo cumprir junto, como 1000 km em provas este ano. Contam sozinhas a partir das provas feitas."}));return box}
+  for(const d of ativos)box.append(desafioCard(d));return box}
+function formDesafio(){const ano=new Date().getFullYear(),prox=new Date().getMonth()>=10?ano+1:ano;
+  const T=[["1000 km em provas em "+prox,"km","grupo",1000,prox+"-01-01",prox+"-12-31"],["Everest coletivo","dplus","grupo",8849,prox+"-01-01",prox+"-12-31"],["50 provas em "+prox,"provas","grupo",50,prox+"-01-01",prox+"-12-31"],["Todos fazem 100 km em "+prox,"km","cada",100,prox+"-01-01",prox+"-12-31"]];
+  const f=h("form",{class:"form registo dform",onsubmit:async e=>{e.preventDefault();const tit=$("dTit").value.trim(),meta=parseFloat($("dMeta").value.replace(",",".")),ini=$("dIni").value,fim=$("dFim").value;
+      if(!tit||!(meta>0)||!ini||!fim||fim<ini){toast("Preenche o nome, a meta e as datas.");return}
+      try{await api("desafios",{method:"POST",prefer:"return=minimal",body:{grupo,titulo:tit.slice(0,60),medida:$("dMed").value,modo:$("dModo").value,meta,inicio:ini,fim,criado_por:me}});novoDesafio=false;toast("Desafio criado");
+        desafios=(await api("desafios?select=*&order=fim.asc"))||[];draw()}catch(_){toast("Não foi possível criar o desafio.")}}},
+    h("div",{class:"full dtemplates"},...T.map(t=>h("button",{type:"button",class:"chip-reg",onclick:()=>{$("dTit").value=t[0];$("dMed").value=t[1];$("dModo").value=t[2];$("dMeta").value=t[3];$("dIni").value=t[4];$("dFim").value=t[5]},text:t[0]}))),
+    h("label",{class:"full",for:"dTit"},"Nome",h("input",{id:"dTit",maxlength:"60",required:true,placeholder:"1000 km em provas em "+prox})),
+    h("label",{for:"dMed"},"Medida",h("select",{id:"dMed"},h("option",{value:"km",text:"km em provas"}),h("option",{value:"dplus",text:"metros de D+"}),h("option",{value:"provas",text:"provas feitas"}))),
+    h("label",{for:"dModo"},"Como conta",h("select",{id:"dModo"},h("option",{value:"grupo",text:"Somado, o grupo todo"}),h("option",{value:"cada",text:"Cada um tem de chegar lá"}))),
+    h("label",{for:"dMeta"},"Meta",h("input",{id:"dMeta",inputmode:"decimal",required:true,placeholder:"1000"})),
+    h("label",{for:"dIni"},"De",h("input",{id:"dIni",type:"date",required:true,value:prox+"-01-01"})),
+    h("label",{for:"dFim"},"Até",h("input",{id:"dFim",type:"date",required:true,value:prox+"-12-31"})),
+    h("div",{class:"full row"},h("button",{class:"btn primary",type:"submit",text:"Criar desafio"}),h("button",{class:"btn",type:"button",onclick:()=>{novoDesafio=false;draw()},text:"Cancelar"})));
+  return f}
+
 // ---------- membros ----------
 const linkMembro=id=>"#s=membro&m="+id;
 const fmtKm=n=>fmtN(Math.round(n*10)/10);
@@ -973,6 +1014,7 @@ function draw(){
       if(dias>=0&&dias<=15&&coordsDe(p)&&!meteo[p.id])previsao(p);const m=meteo[p.id];
       return [outros.length?h("span",{class:"s",text:"Contigo: "+outros.join(", ")}):null,m&&m.estado==="ok"?h("span",{class:"s mt",text:(METEO[m.cod]||"")+" · "+Math.round(m.min)+"–"+Math.round(m.max)+" °C"+(m.chuva!=null?" · chuva "+m.chuva+"%":"")}):null].filter(Boolean)})())})():null;
   listaPorMes(grp,$("view-grupo"),podeMarcar()?"Ainda ninguém marcou presença. Vai a Todas e carrega em Vou, Inscrito ou Talvez.":"Quando entrares no grupo, aqui aparecem as provas a que o grupo vai.");
+  {const dv=desafiosView();if(dv)$("view-grupo").prepend(dv)}
   {const ma=meuAno();if(ma)$("view-grupo").prepend(ma)}
   {const hj=new Date(),mes=hj.getMonth(),anoH=String(mes===0?hj.getFullYear()-1:hj.getFullYear());if(me&&(mes===11||mes===0)&&estatTotais(me,anoH).n)$("view-grupo").prepend(h("button",{type:"button",class:"anobanner",onclick:()=>abrirAno(me,anoH)},h("span",{class:"k",text:"Já está pronto"}),h("span",{class:"t",text:"O teu "+anoH+" no trail ▶"}),h("span",{class:"s",text:"Histórias para partilhar com o grupo e nas redes."})))}
   {const ids=Object.keys(novas).filter(k=>novas[k]);if(ids.length){const todasP=[...provas,...passadas];$("view-grupo").prepend(h("div",{class:"novasbox"},h("strong",{text:"💬 Mensagens novas"}),...ids.map(pid=>{const pp=todasP.find(x=>x.id===pid);return pp?h("button",{type:"button",class:"linkbtn",onclick:()=>abrir(pid),text:pp.nome+" ("+novas[pid]+")"}):null})))}}

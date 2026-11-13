@@ -273,3 +273,8 @@ grant update (casa) on public.membros to anon, authenticated;
 -- apoios (mensagens de quem segue) e seguidores_push (notificações de quem segue, sem conta),
 -- e as funções públicas seguir_ver, seguir_apoiar e seguir_subscrever (SECURITY DEFINER, acesso só com o token).
 -- admin_novo_codigo passou a mudar também direto.grupo.
+
+-- ---------- desafios do grupo ----------
+-- Tabela desafios (migração "desafios"): titulo, medida (km|dplus|provas), modo (grupo|cada), meta, inicio, fim.
+-- O progresso é calculado na app a partir das provas feitas no período.
+-- admin_novo_codigo deve mudar também desafios.grupo (migração pendente "admin_novo_codigo_desafios").

@@ -551,3 +551,20 @@ body.modo-seguir>*:not(#seguir):not(#toast){display:none !important}
 .segeta{margin-bottom:12px}.segeta b{font-family:var(--display);font-size:2.4rem}
 .segapoio{display:flex;flex-direction:column;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
 .segrod{text-align:center;margin-top:24px}
+/* desafios */
+.desafios{margin:0 0 14px}
+.desafios h3{margin:0}
+.desafio{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-top:8px}
+.desafio.feito{border-color:#3c8a55;background:color-mix(in srgb,#3c8a55 8%,var(--surface))}
+.desafio.acabou{opacity:.7}
+.dcab{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.dbarra{height:12px;border-radius:999px;background:var(--chip);overflow:hidden;margin:10px 0 6px}
+.dbarra i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#ee5a0f,#f08a3c);transition:width .6s}
+.desafio.feito .dbarra i{background:#3c8a55}
+.dlinha{font-size:.92rem}
+.dcontrib{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.chip-p{font-size:.8rem;padding:3px 9px;border-radius:999px;background:var(--chip)}
+.chip-p.ok{background:#e2f2e6;color:#1d4d2c;font-weight:700}
+.dapagar{margin-top:6px;font-size:.8rem}
+.dtemplates{display:flex;flex-wrap:wrap;gap:6px}
+.dform{margin-top:8px}
