@@ -1,6 +1,12 @@
 (function(){
 "use strict";
 const CFG=window.DORSAL_CONFIG||{};
+// registo de erros anónimo: mensagem, sítio do código e versão; sem dados pessoais
+(function(){let n=0;const V=(document.querySelector('script[src^="app.js"]')||{src:""}).src.split("v=")[1]||"";
+  const env=(msg,onde)=>{if(n>=3||!navigator.onLine)return;n++;try{fetch(CFG.supabaseUrl.replace(/\/$/,"")+"/rest/v1/rpc/registar_erro",{method:"POST",keepalive:true,headers:{"Content-Type":"application/json",apikey:CFG.supabaseAnonKey,Authorization:"Bearer "+CFG.supabaseAnonKey},
+    body:JSON.stringify({p_versao:V,p_msg:String(msg||"").slice(0,300),p_onde:String(onde||"").replace(/https?:\/\/[^\s)]+\//g,"").slice(0,400),p_ua:navigator.userAgent.slice(0,200)})}).catch(()=>{})}catch(_){}};
+  window.addEventListener("error",e=>{if(!e.message||/ResizeObserver|Script error/i.test(e.message))return;env(e.message,(e.error&&e.error.stack)||((e.filename||"")+":"+e.lineno+":"+e.colno))});
+  window.addEventListener("unhandledrejection",e=>{const r=e.reason;if(!r||r.name==="AbortError")return;env("promessa: "+(r.message||r),r.stack||"")})})();
 const ONLINE=!!(CFG.supabaseUrl&&CFG.supabaseAnonKey);
 const DISTRITOS=["Aveiro","Beja","Braga","Bragança","Castelo Branco","Coimbra","Évora","Faro","Guarda","Leiria","Lisboa","Portalegre","Porto","Santarém","Setúbal","Viana do Castelo","Vila Real","Viseu","Açores","Madeira"];
 const MESES=["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
@@ -353,7 +359,8 @@ function privacidade(){const box=h("article",{class:"sec privacidade"});
       it("As tuas marcações e resultados","Inscrito, vou ou talvez, percurso, boleias, km, D+ e tempos."),
       it("Mensagens","As que escreves na conversa de cada prova."),
       it("Trilhos GPX","Só os que importas. Mostram por onde passaste, por isso partilha-os só com quem confias."),
-      it("Notificações","Se as activares, o endereço técnico do teu telemóvel para receber avisos. Desliga-se quando quiseres.")),
+      it("Notificações","Se as activares, o endereço técnico do teu telemóvel para receber avisos. Desliga-se quando quiseres."),
+      it("Erros da app","Se a app falhar, guarda-se de forma anónima a mensagem de erro, a versão e o tipo de telemóvel, para corrigirmos. Sem nome nem grupo.")),
     h("h2",{text:"Onde fica"}),h("p",{text:"Os dados ficam numa base de dados Supabase na União Europeia (Frankfurt). A app está alojada no GitHub Pages. A previsão do tempo vem da Open-Meteo e os mapas do OpenTopoMap: a estes serviços só se envia a localização da prova, nunca a tua."}),
     h("p",{text:"Neste telemóvel ficam guardados o grupo, quem és e uma cópia das provas para funcionar sem rede. Apagas isso limpando os dados do site no browser."}),
     h("h2",{text:"Os teus direitos"}),h("p",{text:"Ao abrigo do RGPD podes ver, levar e apagar os teus dados quando quiseres, aqui mesmo."}));

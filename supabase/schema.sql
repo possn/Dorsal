@@ -282,3 +282,8 @@ grant update (casa) on public.membros to anon, authenticated;
 -- ---------- fotos das provas ----------
 -- Bucket público "fotos" (JPEG até 450 KB) e tabela fotos (grupo, prova_id, membro_id, caminho).
 -- admin_novo_codigo muda também fotos.grupo. Envio e remoção só pela função "fotos" (valida o membro no grupo; máx. 6 por membro e prova, 3000 por grupo).
+
+-- ---------- revisão de 13 Nov 2026 ----------
+-- Índices nas chaves estrangeiras (migração "indices_chaves_estrangeiras").
+-- criar_grupo só é chamada por dentro (criar_grupo2); execute revogado ao anon (migração "criar_grupo_so_interno").
+-- Registo de erros anónimo: tabela erros (sem acesso directo) e função registar_erro (máx. 300 por hora).
