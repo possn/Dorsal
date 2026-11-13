@@ -277,4 +277,4 @@ grant update (casa) on public.membros to anon, authenticated;
 -- ---------- desafios do grupo ----------
 -- Tabela desafios (migração "desafios"): titulo, medida (km|dplus|provas), modo (grupo|cada), meta, inicio, fim.
 -- O progresso é calculado na app a partir das provas feitas no período.
--- admin_novo_codigo deve mudar também desafios.grupo (migração pendente "admin_novo_codigo_desafios").
+-- admin_novo_codigo muda também desafios.grupo (migração "admin_novo_codigo_desafios").
