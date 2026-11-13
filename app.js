@@ -755,6 +755,44 @@ function mochilaView(p){if(!me||!pres[p.id]||!foiA(p.id,me))return null;const di
     valid(p.info||"")?h("a",{href:valid(p.info),target:"_blank",rel:"noopener",text:"Abrir a página da prova ↗"}):null);
   return det}
 
+// ---------- fotos das provas ----------
+const fotosP={};
+const urlFoto=f=>CFG.supabaseUrl.replace(/\/$/,"")+"/storage/v1/object/public/fotos/"+f.caminho;
+async function carregarFotos(pid,forcar){const c=fotosP[pid];if(!forcar&&c&&(c.a||Date.now()-c.t<60000))return;fotosP[pid]=Object.assign(c||{lista:[]},{a:true});
+  try{const l=await api("fotos?prova_id=eq."+encodeURIComponent(pid)+"&select=id,membro_id,caminho,largura,altura,criado_em&order=criado_em.asc");fotosP[pid]={lista:l||[],t:Date.now(),a:false}}
+  catch(_){fotosP[pid]={lista:(c&&c.lista)||[],t:Date.now(),a:false}}if(provaAberta()===pid)draw()}
+async function comprimir(file){const bmp=await createImageBitmap(file,{imageOrientation:"from-image"}).catch(()=>null);
+  let img=bmp;if(!img){img=await new Promise((r,j)=>{const i=new Image();i.onload=()=>r(i);i.onerror=j;i.src=URL.createObjectURL(file)})}
+  const W0=img.width,H0=img.height,M=1600,k=Math.min(1,M/Math.max(W0,H0)),w=Math.round(W0*k),hh=Math.round(H0*k);
+  const c=document.createElement("canvas");c.width=w;c.height=hh;c.getContext("2d").drawImage(img,0,0,w,hh);
+  for(const q of [.82,.74,.66,.58,.5,.42]){const d=c.toDataURL("image/jpeg",q);if(d.length*0.75<=420000)return {d,w,h:hh}}
+  const c2=document.createElement("canvas");c2.width=Math.round(w*.7);c2.height=Math.round(hh*.7);c2.getContext("2d").drawImage(c,0,0,c2.width,c2.height);return {d:c2.toDataURL("image/jpeg",.6),w:c2.width,h:c2.height}}
+async function enviarFotos(p,files){const fs=[...files].slice(0,6);let ok=0;
+  for(let i=0;i<fs.length;i++){toast("A enviar foto "+(i+1)+" de "+fs.length+"…");
+    try{const {d,w,h:hh}=await comprimir(fs[i]);const r=await fetch(CFG.supabaseUrl.replace(/\/$/,"")+"/functions/v1/fotos",{method:"POST",headers:fnHeaders(),body:JSON.stringify({membro_id:me,prova_id:p.id,imagem:d,largura:w,altura:hh})});
+      const j=await r.json().catch(()=>({}));if(!r.ok){toast(j.erro||"Não foi possível enviar a foto.");break}ok++}
+    catch(_){toast("Não consegui ler essa foto.");}}
+  if(ok)toast(ok===1?"Foto enviada":ok+" fotos enviadas");carregarFotos(p.id,true)}
+function abrirFoto(p,lista,i){let k=i;const img=h("img",{alt:""}),leg=h("div",{class:"fleg"});
+  const mostrar=()=>{const f=lista[k];img.src=urlFoto(f);leg.replaceChildren(h("b",{text:nomeDe(f.membro_id)}),h("span",{text:" · "+(k+1)+"/"+lista.length}),
+    f.membro_id===me?h("button",{class:"linkbtn",type:"button",onclick:async ev=>{const b=ev.currentTarget;if(b.dataset.c!=="1"){b.dataset.c="1";b.textContent="Confirmar: apagar";return}
+      try{const r=await fetch(CFG.supabaseUrl.replace(/\/$/,"")+"/functions/v1/fotos",{method:"DELETE",headers:fnHeaders(),body:JSON.stringify({membro_id:me,id:f.id})});if(!r.ok)throw 0;fechar();toast("Foto apagada");carregarFotos(p.id,true)}catch(_){toast("Não foi possível apagar.")}},text:"Apagar"}):null,
+    h("button",{class:"linkbtn",type:"button",onclick:async()=>{try{const b=await (await fetch(urlFoto(f))).blob();const file=new File([b],"dorsal-foto.jpg",{type:"image/jpeg"});if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:p.nome});return}}catch(e){if(e&&e.name==="AbortError")return}const a=h("a",{href:urlFoto(f),download:"dorsal-foto.jpg",target:"_blank"});document.body.append(a);a.click();a.remove()},text:"Partilhar"}))};
+  const ov=h("div",{class:"lightbox",role:"dialog","aria-label":"Foto"},img,leg,h("button",{class:"hx",type:"button","aria-label":"Fechar",onclick:()=>fechar(),text:"✕"}),
+    lista.length>1?h("button",{class:"lbnav esq",type:"button","aria-label":"Anterior",onclick:()=>{k=(k-1+lista.length)%lista.length;mostrar()},text:"‹"}):null,
+    lista.length>1?h("button",{class:"lbnav dir",type:"button","aria-label":"Seguinte",onclick:()=>{k=(k+1)%lista.length;mostrar()},text:"›"}):null);
+  const tecla=e=>{if(e.key==="Escape")fechar();if(e.key==="ArrowRight"){k=(k+1)%lista.length;mostrar()}if(e.key==="ArrowLeft"){k=(k-1+lista.length)%lista.length;mostrar()}};
+  const fechar=()=>{ov.remove();document.body.style.overflow="";document.removeEventListener("keydown",tecla)};
+  let x0=null;ov.addEventListener("touchstart",e=>{x0=e.touches[0].clientX},{passive:true});ov.addEventListener("touchend",e=>{if(x0==null)return;const dx=e.changedTouches[0].clientX-x0;x0=null;if(Math.abs(dx)>50){k=(k+(dx<0?1:-1)+lista.length)%lista.length;mostrar()}});
+  document.body.append(ov);document.body.style.overflow="hidden";document.addEventListener("keydown",tecla);mostrar()}
+function fotosView(p){if(!grupo)return null;const dias=Math.round((parseD(p.data)-hoje())/864e5);if(dias>0)return null;
+  const c=fotosP[p.id];if(!c||Date.now()-c.t>60000)carregarFotos(p.id);const lista=c?c.lista:[];
+  const podeEnviar=me&&podeMarcar();if(!lista.length&&!podeEnviar)return null;
+  const fi=h("input",{type:"file",accept:"image/*",multiple:true,class:"vh",id:"fotoF-"+p.id});fi.addEventListener("change",()=>{if(fi.files.length)enviarFotos(p,fi.files);fi.value=""});
+  return h("section",{class:"grupo-bloco fotos"},h("div",{class:"row between"},h("h3",null,"📸 Fotos ",lista.length?h("span",{class:"n",text:String(lista.length)}):null),podeEnviar?h("label",{class:"btn small",for:"fotoF-"+p.id,text:"+ Fotos"}):null),fi,
+    lista.length?h("div",{class:"fgrid"},...lista.map((f,i)=>h("button",{type:"button",class:"fthumb",onclick:()=>abrirFoto(p,lista,i),"aria-label":"Foto de "+nomeDe(f.membro_id)},h("img",{src:urlFoto(f),loading:"lazy",alt:""})))):
+      h("p",{class:"hint",text:"Junta até 6 fotos tuas desta prova. O grupo todo vê o álbum."}))}
+
 // ---------- membros ----------
 const linkMembro=id=>"#s=membro&m="+id;
 const fmtKm=n=>fmtN(Math.round(n*10)/10);
@@ -1058,6 +1096,7 @@ function detalhe(pid){const box=$("view-prova");box.replaceChildren();
       const lug=x.boleia==="oferece"?h("label",{class:"lug"},"Lugares livres ",(()=>{const s=h("select",{onchange:e=>setExtra(p.id,{lugares:+e.target.value})},...[1,2,3,4,5,6,7].map(n=>h("option",{value:String(n),text:String(n)})));s.value=String(x.lugares||3);return s})()):null;
       const casaEl=(x.boleia&&!casas[me])?casaSetter():null;
       return h("div",{class:"plano"},h("strong",{text:"O teu plano"}),ops.length?selP:h("input",{placeholder:"Percurso (por exemplo 25K)",maxlength:"40",value:x.percurso,onchange:e=>setExtra(p.id,{percurso:e.target.value.trim()})}),boleia,lug,casaEl)})():null,
+    fotosView(p),
     diretoView(p),
     eTreino(p)?null:prevProva(p),
     eTreino(p)?null:mochilaView(p),

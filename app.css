@@ -590,3 +590,14 @@ body.modo-seguir>*:not(#seguir):not(#toast){display:none !important}
 .mitem small{color:var(--muted,#6b6b6b);font-size:.8rem}
 .mitem.ok>span>span{text-decoration:line-through;opacity:.6}
 .mnovo{gap:8px;margin:10px 0}.mnovo input{flex:1}
+/* fotos */
+.fgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:8px}
+.fthumb{padding:0;border:0;aspect-ratio:1;overflow:hidden;border-radius:6px;background:var(--chip);cursor:pointer}
+.fthumb img{width:100%;height:100%;object-fit:cover;display:block}
+.fotos label.btn{cursor:pointer}
+.lightbox{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.94);display:flex;flex-direction:column;align-items:center;justify-content:center}
+.lightbox img{max-width:100vw;max-height:82dvh;object-fit:contain}
+.fleg{color:#fff;display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:center;padding:12px}
+.fleg .linkbtn{color:#fff;opacity:.85}
+.lbnav{position:absolute;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);color:#fff;border:0;width:44px;height:64px;font-size:2rem;border-radius:8px}
+.lbnav.esq{left:6px}.lbnav.dir{right:6px}
