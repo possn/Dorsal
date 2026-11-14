@@ -11,20 +11,13 @@ jobs:
           mkdir -p paginas
           UA="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36 DorsalBot/1.0 (+https://possn.github.io/Dorsal/)"
           get(){ curl -sL -A "$UA" --max-time 40 -o "paginas/$1" -w "$1 %{http_code} %{size_download}\n" "$2" || echo "$1 falhou"; sleep 2; }
-          get tp_eventos.html "https://www.trilhoperdido.com/eventos"
-          get tp_robots.txt "https://www.trilhoperdido.com/robots.txt"
-          get tp_home.html "https://www.trilhoperdido.com/"
-          get pr_trail.html "https://www.portugalrunning.com/trail/"
-          get pr_robots.txt "https://www.portugalrunning.com/robots.txt"
-          get gt_p1.html "https://gotrail.run/calendario-trail-running/portugal"
-          get gt_p2.html "https://gotrail.run/calendario-trail-running/portugal?page=2"
-          get gt_robots.txt "https://gotrail.run/robots.txt"
-          get gt_sitemap.xml "https://gotrail.run/sitemap.xml"
-          get tp_eventos2.html "https://www.trilhoperdido.com/eventos?page=2"
-          get rl_p1.html "https://running.life/trail-running-calendar/portugal"
-          get atrp.html "https://www.atrp.pt/calendario"
-          get sg.html "https://stopandgo.net/events"
-          get lap.html "https://lap2go.com/pt/event/list"
+          get pr_sitemap.xml "https://www.portugalrunning.com/sitemap_index.xml"
+          get pr_ev.html "https://www.portugalrunning.com/eventos/trail-vitoriano/"
+          get gt_ev.html "https://gotrail.run/pt/event/trail-do-zezere"
+          get gt_p9.html "https://gotrail.run/calendario-trail-running/portugal?page=9"
+          get gt_races.xml "https://gotrail.run/sitemap_gotrail-run-races-1.xml"
+          get tp_ev.html "https://www.trilhoperdido.com/evento/vulcan-trail-2027"
+          get rl_p2.html "https://running.life/trail-running-calendar/portugal?page=2"
           ls -la paginas
       - name: Guardar no ramo fontes-exploracao
         run: |
