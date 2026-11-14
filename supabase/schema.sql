@@ -300,3 +300,4 @@ grant update (casa) on public.membros to anon, authenticated;
 -- RLS por grupo_atual(); a função notificar (tipo "lembretes", pg_cron 18h) avisa quem marcou vou/talvez 3 dias antes e na véspera.
 -- admin_novo_codigo muda também prazos.grupo.
 -- Grupo de demonstração "Trilheiros da Serra" (código começa por "demo"), com nomes fictícios, para mostrar a app.
+-- Limpeza (migração "admin_novo_codigo_prazos_e_limpeza"): removidas importar_provas(token), import_config e o índice repetido provas_data_idx.
