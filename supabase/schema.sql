@@ -287,3 +287,10 @@ grant update (casa) on public.membros to anon, authenticated;
 -- Índices nas chaves estrangeiras (migração "indices_chaves_estrangeiras").
 -- criar_grupo só é chamada por dentro (criar_grupo2); execute revogado ao anon (migração "criar_grupo_so_interno").
 -- Registo de erros anónimo: tabela erros (sem acesso directo) e função registar_erro (máx. 300 por hora).
+
+-- ---------- recolha automática de provas ----------
+-- O GitHub Actions (.github/workflows/recolher-provas.yml, segundas 04:23 UTC) corre scripts/recolher_provas.py
+-- (gotrail.run, Trilho Perdido, Portugal Running) e publica provas.json no ramo "recolha".
+-- O Supabase vai buscar esse ficheiro (pg_cron 'dorsal-importar-pedir' às 05:35 e 'dorsal-importar-processar' às 05:45 UTC)
+-- com importar_github_pedir() / importar_github_processar(), que chamam _importar_provas (só insere provas novas
+-- do calendário público e só preenche campos vazios; nunca apaga nem altera provas de grupos).
