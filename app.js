@@ -1166,13 +1166,14 @@ function draw(){
   {const sel=$("regioes").querySelector('[aria-pressed="true"]');if(sel&&filtroReg&&!$("view-todas").hidden)requestAnimationFrame(()=>{const r=$("regioes");r.scrollLeft=sel.offsetLeft-r.offsetLeft-8})}
   fillSel($("fDistrito"),reg?"Todos os distritos de "+(reg[0]==="ilhas"?"Açores e Madeira":reg[1]):"Todos os distritos",[...new Set(fut.filter(naReg).map(p=>p.distrito).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"pt")).map(x=>[x,x]));
   if(filtroDist&&[...$("fDistrito").options].some(o=>o.value===filtroDist))$("fDistrito").value=filtroDist;
-  const q=$("q").value.trim().toLowerCase(),fd=$("fDistrito").value,fm=$("fMes").value;
+  const q=norm($("q").value.trim()),fd=$("fDistrito").value,fm=$("fMes").value;
+  const qTok=q.split(/\s+/).filter(Boolean),bate=p=>{if(!qTok.length)return true;const t=norm([p.nome,p.concelho,p.distrito].join(" "));return qTok.every(w=>t.includes(w)||(w.length>=5&&t.includes(w.slice(0,-1)))||(w.length>=6&&t.includes(w.slice(0,-2))))};
   // filtros extra: distância e tipo de percurso
   const tiposDe=p=>String(p.distancias||"").split(",").map(s=>s.trim()).filter(Boolean);
   const tiposExist=[...new Set(fut.flatMap(tiposDe))].sort((a,b)=>{const ia=TIPOS_ORDEM.indexOf(a),ib=TIPOS_ORDEM.indexOf(b);return (ia<0?99:ia)-(ib<0?99:ib)||a.localeCompare(b,"pt")});
   $("tipos").replaceChildren(...tiposExist.map(t=>h("button",{type:"button",class:"chip-reg","aria-pressed":String(filtroTipos.has(t)),onclick:()=>{filtroTipos.has(t)?filtroTipos.delete(t):filtroTipos.add(t);store.set("dorsal.tipos",[...filtroTipos].join("|")||null);draw()}},t)));
   const semTipo=fut.filter(p=>!tiposDe(p).length).length;
-  $("tiposTxt").textContent=filtroTipos.size&&semTipo?semTipo+(semTipo===1?" prova ainda sem percursos publicados fica":" provas ainda sem percursos publicados ficam")+" de fora deste filtro.":"";$("tiposTxt").hidden=!$("tiposTxt").textContent;
+  $("tiposTxt").textContent=filtroTipos.size&&semTipo?semTipo+(semTipo===1?" prova ainda sem percursos publicados continua":" provas ainda sem percursos publicados continuam")+" na lista, para não as perderes.":"";$("tiposTxt").hidden=!$("tiposTxt").textContent;
   $("tipos").prepend(h("button",{type:"button",class:"chip-reg","aria-pressed":String(!filtroTipos.size),onclick:()=>{filtroTipos.clear();store.set("dorsal.tipos",null);draw()}},"Todos os percursos"));
   $("raios").replaceChildren(...[0,...RAIOS].map(r=>h("button",{type:"button",class:"chip-reg","aria-pressed":String(filtroRaio===r),disabled:!casa&&r?true:null,onclick:()=>{filtroRaio=r;store.set("dorsal.raio",r?String(r):null);draw()}},r?"até "+r+" km":"Qualquer distância")));
   const semLocal=fut.filter(p=>!coordsDe(p)).length;
@@ -1180,7 +1181,7 @@ function draw(){
     " Distância em linha recta até ao centro do concelho da prova, por isso é aproximada."+(filtroRaio&&semLocal?" "+semLocal+(semLocal===1?" prova sem local conhecido fica":" provas sem local conhecido ficam")+" de fora.":"")]:["Escolhe a tua localização ou o teu concelho para filtrar por distância. Fica só neste telemóvel."]));
   if(!$("concelhosList").options.length)$("concelhosList").replaceChildren(...LUG.c.map(c=>h("option",{value:c[4]+" ("+c[1]+")"})));
   {const nf=(filtroRaio&&casa?1:0)+($("fDistrito").value?1:0)+($("fMes").value?1:0);$("maisBtn").textContent=nf?"Filtros ("+nf+")":"Filtros";$("maisBtn").classList.toggle("on",!!nf)}
-  const todas=fut.filter(p=>!eTreino(p)&&naReg(p)&&(!filtroRaio||!casa||(kmAte(p)!=null&&kmAte(p)<=filtroRaio))&&(!filtroTipos.size||tiposDe(p).some(t=>filtroTipos.has(t)))&&(!fd||p.distrito===fd)&&(!fm||p.data.slice(0,7)===fm)&&(!q||[p.nome,p.concelho,p.distrito].join(" ").toLowerCase().includes(q)));
+  const todas=fut.filter(p=>!eTreino(p)&&naReg(p)&&(!filtroRaio||!casa||(kmAte(p)!=null&&kmAte(p)<=filtroRaio))&&(!filtroTipos.size||!tiposDe(p).length||tiposDe(p).some(t=>filtroTipos.has(t)))&&(!fd||p.distrito===fd)&&(!fm||p.data.slice(0,7)===fm)&&bate(p));
   if(vistaCal)calendario(todas,$("todasList"));else listaPorMes(todas,$("todasList"),fut.length?"Nenhuma prova com estes filtros.":"Ainda não há provas.");
   fillSel($("fMes"),"Todos os meses",[...new Set(fut.map(p=>p.data.slice(0,7)))].sort().map(m=>[m,MESES[+m.slice(5)-1]+" "+m.slice(0,4)]));
   $("view-nova").querySelectorAll("input,select,button").forEach(el=>el.disabled=!podeMarcar());
