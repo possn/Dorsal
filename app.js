@@ -134,10 +134,95 @@ function mensagem(p){const q=quem(p.id),L=[];L.push(p.nome+" — "+dataLonga(p.d
    if(of.length)L.push("Boleias: "+of.map(id=>nomeDe(id)+" ("+(exDe(p.id,id).lugares||0)+" lugares)").join(", "));if(pr.length)L.push("Precisam de boleia: "+pr.map(nomeDe).join(", "))}if(q.talvez.length)L.push("Talvez: "+q.talvez.map(nomeDe).join(", "));
   if(!temGente(p.id))L.push("Ainda ninguém marcou. Alguém alinha?");
   const i=valid(p.inscricao)||valid(p.info);if(i)L.push((valid(p.inscricao)?"Inscrição: ":"Informação: ")+i);return L.join("\n")}
-function resumo(){const lim=new Date(hoje().getTime()+42*864e5);const ps=futuras().filter(p=>parseD(p.data)<=lim&&temGente(p.id));
-  if(!ps.length)return "Ainda ninguém marcou presença em provas das próximas 6 semanas.";
-  return "Próximas provas do grupo:\n\n"+ps.map(p=>{const q=quem(p.id),d=parseD(p.data),parts=[];if(q.inscrito.length)parts.push("inscritos "+q.inscrito.map(nomeDe).join(", "));if(q.vou.length)parts.push("vão "+q.vou.map(nomeDe).join(", "));if(q.talvez.length)parts.push("talvez "+q.talvez.map(nomeDe).join(", "));
-    return "- "+d.getDate()+" de "+MESES[d.getMonth()]+", "+p.nome+(p.concelho?" ("+p.concelho+")":"")+": "+parts.join("; ")+(valid(p.inscricao)?"\n  "+p.inscricao:"")}).join("\n")}
+// ---------- agenda do grupo (texto WhatsApp + imagem) ----------
+let agOpt={sem:8,talvez:true,treinos:false,convite:false};try{Object.assign(agOpt,JSON.parse(store.get("dorsal.agenda")||"{}"))}catch(_){}
+const AG_FRASES=["Quem não vai, depois não se queixe das fotos 😏","As inscrições não se fazem sozinhas 🏃","Bora sujar as sapatilhas? 🥾","Mais vale arrependido de ter ido do que de ter ficado no sofá 🛋️","Quem se junta ao comboio? 🚂","Lama, subidas e boa companhia: o costume ⛰️"];
+function agendaProvas(){const lim=agOpt.sem?new Date(hoje().getTime()+agOpt.sem*7*864e5):null;
+  return futuras().filter(p=>(!lim||parseD(p.data)<=lim)&&(agOpt.treinos||!eTreino(p))).map(p=>{const q=quem(p.id);if(!agOpt.talvez)q.talvez=[];return {p,q,n:q.inscrito.length+q.vou.length+q.talvez.length}}).filter(r=>r.n).sort((a,b)=>a.p.data<b.p.data?-1:a.p.data>b.p.data?1:0)}
+function agendaJanela(){return agOpt.sem?"próximas "+agOpt.sem+" semanas":"próximos meses"}
+function resumo(){const L=agendaProvas();const cab="🏔️ *AGENDA"+(grupoNome?" · "+grupoNome.toUpperCase():" DO GRUPO")+"*\n_"+(agendaJanela().replace(/^./,c=>c.toUpperCase()))+"_";
+  if(!L.length)return cab+"\n\nAinda ninguém marcou presença em provas das "+agendaJanela()+". Quem abre as hostilidades? 😄";
+  const frase=AG_FRASES[(hoje().getDate()+L.length)%AG_FRASES.length];
+  const blocos=L.map(({p,q})=>{const d=parseD(p.data),dias=Math.round((d-hoje())/864e5);
+    const lin=["📅 *"+d.getDate()+" "+MESES[d.getMonth()].slice(0,3).toUpperCase()+"* · "+(eTreino(p)?"👟 ":"")+"*"+p.nome+"*"];
+    const sub=[[p.concelho,p.distrito].filter(Boolean).join(", "),p.hora&&eTreino(p)?"às "+p.hora:"",dias<=0?"é hoje!":dias===1?"é amanhã!":"daqui a "+dias+" dias"].filter(Boolean);
+    lin.push("📍 "+sub.join(" · "));
+    if(q.inscrito.length)lin.push("✅ Inscritos: "+q.inscrito.map(nomeDe).join(", "));
+    if(q.vou.length)lin.push("🏃 Vão: "+q.vou.map(nomeDe).join(", "));
+    if(q.talvez.length)lin.push("🤔 Talvez: "+q.talvez.map(nomeDe).join(", "));
+    if(valid(p.inscricao)&&!eTreino(p))lin.push("📝 "+p.inscricao);
+    return lin.join("\n")});
+  let t=cab+"\n\n"+blocos.join("\n\n")+"\n\n"+frase;
+  if(agOpt.convite&&grupo)t+="\n👉 Marca presença no Dorsal: "+linkGrupo();
+  return t}
+async function agendaImagens(){const L=agendaProvas();if(!L.length)return [];
+  const fam=getComputedStyle(document.documentElement).getPropertyValue("--display").trim()||"sans-serif";
+  try{await document.fonts.load("700 80px "+fam.split(",")[0])}catch(_){}
+  const [logo,glogo]=await Promise.all([carregarImg("icons/dorsal-v2.svg"),carregarImg(grupoLogo)]);
+  const W=1080,PAD=64,POR=Math.ceil(L.length/Math.ceil(L.length/6)),paginas=[];for(let i=0;i<L.length;i+=POR)paginas.push(L.slice(i,i+POR));
+  const COR={inscrito:"#3fbf6f",vou:"#ee5a0f",talvez:"#8a958d"},ROT={inscrito:"INSCRITOS",vou:"VÃO",talvez:"TALVEZ"};
+  const med=document.createElement("canvas").getContext("2d");
+  const chipsDe=(q,maxW)=>{const out=[];let x=0,y=0;med.font="600 30px "+fam;
+    for(const k of ["inscrito","vou","talvez"])for(const id of q[k]){const nm=nomeDe(id),w=med.measureText(nm).width+56;if(x+w>maxW&&x>0){x=0;y+=58}out.push({k,nm,x,y,w});x+=w+12}
+    return {out,h:out.length?y+46:0}};
+  const imgs=[];
+  for(let pi=0;pi<paginas.length;pi++){const pg=paginas[pi];
+    const blocos=pg.map(r=>{const cw=W-PAD*2-170-36,ch=chipsDe(r.q,cw-8);med.font="700 44px "+fam;
+      const pal=r.p.nome.toUpperCase().split(/\s+/),ls=[];let l="";for(const w of pal){const t=l?l+" "+w:w;if(med.measureText(t).width>cw&&l){ls.push(l);l=w}else l=t}ls.push(l);
+      const nl=ls.slice(0,2);return {r,nl,ch,h:Math.max(170,24+nl.length*50+44+ch.h+28)}});
+    const topo=300,H=Math.max(1350,topo+blocos.reduce((s,b)=>s+b.h+24,0)+150);
+    const c=document.createElement("canvas");c.width=W;c.height=H;const g=c.getContext("2d");
+    const f=g.createLinearGradient(0,0,0,H);f.addColorStop(0,"#17211b");f.addColorStop(1,"#0e1510");g.fillStyle=f;g.fillRect(0,0,W,H);
+    // montanhas de fundo
+    g.fillStyle="rgba(255,255,255,.04)";g.beginPath();g.moveTo(0,250);g.lineTo(180,120);g.lineTo(300,200);g.lineTo(470,60);g.lineTo(640,210);g.lineTo(780,110);g.lineTo(940,190);g.lineTo(W,130);g.lineTo(W,300);g.lineTo(0,300);g.fill();
+    g.fillStyle="#ee5a0f";for(let i=-40;i<W;i+=56){g.beginPath();g.moveTo(i,0);g.lineTo(i+28,0);g.lineTo(i+10,18);g.lineTo(i-18,18);g.fill()}
+    g.textBaseline="middle";
+    if(glogo){g.save();g.beginPath();g.arc(PAD+44,96,44,0,7);g.clip();g.drawImage(glogo,PAD,52,88,88);g.restore()}else if(logo)g.drawImage(logo,PAD,56,80,80);
+    g.fillStyle="#fff";g.font="700 40px "+fam;g.fillText((grupoNome||"O grupo").toUpperCase(),PAD+108,96);
+    g.fillStyle="#ee5a0f";g.font="700 96px "+fam;g.textBaseline="alphabetic";g.fillText("AGENDA",PAD,236);
+    const aw=g.measureText("AGENDA").width;g.fillStyle="#fff";g.font="700 40px "+fam;g.fillText("DO TRAIL",PAD+aw+20,236);
+    g.fillStyle="#9aa89e";g.font="500 28px "+fam;g.textAlign="right";g.fillText(agendaJanela()+(paginas.length>1?"  ·  "+(pi+1)+"/"+paginas.length:""),W-PAD,236);g.textAlign="left";
+    let y=topo;
+    for(const b of blocos){const {p,q}=b.r,d=parseD(p.data),dias=Math.round((d-hoje())/864e5);
+      g.fillStyle="rgba(255,255,255,.06)";rr(g,PAD,y,W-PAD*2,b.h,28);g.fill();
+      // talão de data
+      g.fillStyle=eTreino(p)?"#2f6f4f":"#ee5a0f";rr(g,PAD+20,y+20,150,130,22);g.fill();
+      g.fillStyle="#fff";g.textAlign="center";g.font="700 64px "+fam;g.fillText(String(d.getDate()),PAD+95,y+92);
+      g.font="700 23px "+fam;g.fillText(MESES[d.getMonth()].slice(0,3).toUpperCase()+" · "+DIAS[d.getDay()].slice(0,3).toUpperCase(),PAD+95,y+132);
+      g.font="600 24px "+fam;g.fillStyle="#cfd8cf";g.fillText(dias<=0?"HOJE!":dias===1?"AMANHÃ":"faltam "+dias+"d",PAD+95,y+178>y+b.h-12?y+b.h-14:y+178);
+      g.textAlign="left";const x0=PAD+206;let yy=y+62;
+      g.fillStyle="#fff";g.font="700 44px "+fam;for(const ln of b.nl){g.fillText(ln,x0,yy);yy+=50}
+      g.fillStyle="#9aa89e";g.font="500 28px "+fam;g.fillText([eTreino(p)?"Treino do grupo":"",[p.concelho,p.distrito].filter(Boolean).join(", "),eTreino(p)&&p.hora?p.hora:""].filter(Boolean).join("  ·  ")||" ",x0,yy-6);yy+=24;
+      for(const ch of b.ch.out){const cx=x0+ch.x,cy=yy+ch.y;g.fillStyle=COR[ch.k]+"33";rr(g,cx,cy,ch.w,46,23);g.fill();
+        g.fillStyle=COR[ch.k];g.beginPath();g.arc(cx+22,cy+23,8,0,7);g.fill();g.fillStyle="#fff";g.font="600 30px "+fam;g.textBaseline="middle";g.fillText(ch.nm,cx+38,cy+24);g.textBaseline="alphabetic"}
+      y+=b.h+24}
+    // legenda + rodapé
+    let lx=PAD;g.font="600 26px "+fam;g.textBaseline="middle";
+    for(const k of ["inscrito","vou","talvez"]){if(k==="talvez"&&!agOpt.talvez)continue;g.fillStyle=COR[k];g.beginPath();g.arc(lx+8,H-96,8,0,7);g.fill();g.fillStyle="#cfd8cf";g.fillText(ROT[k],lx+24,H-95);lx+=g.measureText(ROT[k]).width+64}
+    g.fillStyle="#9aa89e";g.font="500 26px "+fam;g.textAlign="right";g.fillText("Marca presença no Dorsal",W-PAD,H-95);const tw=g.measureText("Marca presença no Dorsal").width;g.textAlign="left";
+    if(logo)g.drawImage(logo,W-PAD-tw-46,H-112,34,34);
+    imgs.push(await new Promise(r=>c.toBlob(b=>r(new File([b],"agenda-"+(pi+1)+".png",{type:"image/png"})),"image/png")))}
+  return imgs}
+function rr(g,x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath()}
+function agendaPainel(){const box=$("resumo");box.textContent="";const salvar=()=>{store.set("dorsal.agenda",JSON.stringify(agOpt));agendaPainel()};
+  const t=resumo(),L=agendaProvas();
+  box.append(
+    h("div",{class:"row between"},h("h2",{text:"Agenda para o WhatsApp"}),h("button",{class:"linkbtn",type:"button",onclick:()=>{box.hidden=true}},"Fechar")),
+    h("div",{class:"agsel"},...[[4,"4 sem."],[8,"8 sem."],[12,"3 meses"],[0,"Tudo"]].map(([v,r])=>h("button",{type:"button",class:"chip"+(agOpt.sem===v?" on":""),onclick:()=>{agOpt.sem=v;salvar()}},r))),
+    h("div",{class:"agopts"},
+      ...[["talvez","Incluir “talvez”"],["treinos","Incluir treinos do grupo"],["convite","Juntar link do grupo"]].map(([k,r])=>h("label",{class:"agck"},h("input",{type:"checkbox",checked:agOpt[k]?"":null,onchange:e=>{agOpt[k]=e.target.checked;salvar()}}),r))),
+    h("p",{class:"hint",text:L.length?L.length+(L.length===1?" prova":" provas")+" com gente do grupo"+(agOpt.sem?" nas "+agendaJanela():"")+".":"Ninguém marcou presença neste período."}),
+    h("div",{class:"agprev",id:"agPrev"},L.length?h("span",{class:"hint",text:"A desenhar a imagem…"}):null),
+    h("textarea",{id:"resumoText",readonly:"","aria-label":"Texto para o WhatsApp"}),
+    h("div",{class:"row wrap"},
+      h("button",{class:"btn primary small",type:"button",disabled:L.length?null:"",onclick:partilharAgenda},"Partilhar imagem"),
+      h("button",{class:"btn small",type:"button",onclick:e=>copiar($("resumoText").value,e.currentTarget)},"Copiar texto"),
+      h("a",{class:"btn small",target:"_blank",rel:"noopener",href:"https://wa.me/?text="+encodeURIComponent(t)},"Abrir no WhatsApp")));
+  $("resumoText").value=t;
+  if(L.length)agendaImagens().then(fs=>{const pv=$("agPrev");if(!pv)return;pv.textContent="";for(const f of fs){const u=URL.createObjectURL(f);pv.append(h("img",{src:u,alt:"Pré-visualização da agenda"}))}}).catch(e=>console.error("agenda",e))}
+async function partilharAgenda(){toast("A preparar a imagem…");const files=await agendaImagens();if(!files.length)return;const txt=resumo();
+  try{if(navigator.canShare&&navigator.canShare({files})){await navigator.share({files,title:"Agenda do trail",text:txt});return}}catch(e){if(e&&e.name==="AbortError")return}
+  for(const f of files){const a=h("a",{href:URL.createObjectURL(f),download:f.name});document.body.append(a);a.click();a.remove()}toast("Imagem descarregada. O texto está pronto a copiar.")}
 
 // ---------- acções ----------
 const exDe=(pid,id)=>(extra[pid]&&extra[pid][id])||{percurso:"",boleia:"",lugares:0,tempo:"",km:null,dplus:null};
@@ -1185,7 +1270,7 @@ function draw(){
   if(vistaCal)calendario(todas,$("todasList"));else listaPorMes(todas,$("todasList"),fut.length?"Nenhuma prova com estes filtros.":"Ainda não há provas.");
   fillSel($("fMes"),"Todos os meses",[...new Set(fut.map(p=>p.data.slice(0,7)))].sort().map(m=>[m,MESES[+m.slice(5)-1]+" "+m.slice(0,4)]));
   $("view-nova").querySelectorAll("input,select,button").forEach(el=>el.disabled=!podeMarcar());
-  if(!$("resumo").hidden)$("resumoText").value=resumo();
+  if(!$("resumo").hidden&&!document.activeElement?.closest?.("#resumo"))agendaPainel();
 }
 
 // ---------- secções (menu lateral) ----------
@@ -1290,8 +1375,7 @@ $("geoBtn").addEventListener("click",()=>{if(!navigator.geolocation){toast("Este
 $("casaIn").addEventListener("change",()=>{const v=$("casaIn").value,m=v.match(/^(.*?)\s*\(([^)]+)\)\s*$/);const nome=norm(m?m[1]:v),dist=m?m[2]:null;
   const c=LUG.c.find(x=>x[0]===nome&&(!dist||x[1]===dist));if(!c){toast("Não encontrei esse concelho.");return}$("casaIn").value="";definirCasa({lat:c[2],lon:c[3],nome:c[4]})});
 $("fDistrito").addEventListener("input",()=>{filtroDist=$("fDistrito").value;store.set("dorsal.distrito",filtroDist||null);draw()});
-$("resumoBtn").addEventListener("click",()=>{const r=$("resumo");r.hidden=!r.hidden;if(!r.hidden){const t=resumo();$("resumoText").value=t;$("resumoWa").href="https://wa.me/?text="+encodeURIComponent(t)}});
-$("resumoCopy").addEventListener("click",()=>copiar($("resumoText").value,$("resumoText")));
+$("resumoBtn").addEventListener("click",()=>{const r=$("resumo");r.hidden=!r.hidden;if(!r.hidden)agendaPainel()});
 $("pushBtn").addEventListener("click",()=>{if(pushAtivo())desactivarPush();else{store.set("dorsal.pushdispensa."+grupo,null);activarPush()}});
 $("entrarX").addEventListener("click",()=>{entrarAberto=false;draw()});
 $("criarForm").addEventListener("submit",async e=>{e.preventDefault();const nome=$("criarNome").value.trim().slice(0,40);if(!nome){$("criarMsg").textContent="Escreve o nome do grupo.";return}
