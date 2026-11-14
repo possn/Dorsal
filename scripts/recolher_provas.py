@@ -231,6 +231,9 @@ def gotrail():
             if not tipos & {"trailrun", "skyrunning", "backyard", "backyardultra", "ultra"} :
                 continue  # trail urbano, estrada, OCR, canicross...
             it = ld.get(u, {})
+            nm = norm(it.get("name", ""))
+            if re.search(r"canicross|corta mato|\bcross\b|\bocr\b|obstacul", nm) and not re.search(r"\btrail\b", nm):
+                continue
             ini = it.get("startDate", "")
             try:
                 d = dt.date.fromisoformat(ini[:10])
@@ -284,10 +287,10 @@ def trilhoperdido():
                     data = dt.date(int(m.group(3)), MESES[norm(m.group(2))], int(m.group(1)))
             if x.rstrip(":") == "Localidade" and i + 1 < len(linhas):
                 local = linhas[i + 1]
-        if not data:
+        if not data or len(norm(titulo)) < 4:
             continue
         corpo = " ".join(linhas)
-        if not re.search(r"\btrail\b|\btrilho|caminhada|ultra", norm(titulo + " " + corpo)):
+        if not re.search(r"\btrail\b|\btrilho|\bultra\b|\bsky", norm(titulo)) and not re.search(r"trail (curto|longo|ultra)|mini trail", norm(corpo)):
             continue
         if re.search(r"silvestre|\bbtt\b|ciclismo|estrada", norm(titulo)) and not re.search(r"\btrail\b", norm(titulo)):
             continue
@@ -366,18 +369,24 @@ def portugalrunning(cache):
             continue
         if d < HOJE or d > LIMITE:
             continue
+        tl = [norm(t) for t in reg.get("tipos", [])]
         tipos = " ".join(reg.get("tipos", []))
-        if not re.search(r"trail|caminhada|sky|ultra", norm(tipos + " " + reg["nome"])):
+        # só provas que o próprio site classifica como Trail (ou Skyrunning/Ultra)
+        if not any(t.startswith("trail") or t.startswith("sky") or t.startswith("ultra") or t == "backyard" for t in tl):
             continue
-        if re.search(r"\bbtt\b|estrada|ocr|obstaculos|triatlo|duatlo", norm(tipos)) and not re.search(r"trail", norm(tipos)):
-            continue
+        cats = set()
+        for t in tl:
+            for rot, cat in (("caminhada", "Caminhada"), ("trail kids", "Trail kids"), ("trail jovem", "Trail kids"), ("trail curto", "Trail curto"),
+                             ("trail longo", "Trail longo"), ("trail ultra", "Trail ultra"), ("sky", "Skyrunning"), ("backyard", "Backyard")):
+                if t.startswith(rot):
+                    cats.add(cat)
         partes = [x.strip() for x in reg["local"].split(",")]
         out.append({
             "nome": re.sub(r"\s+20\d\d$", "", reg["nome"]).strip(),
             "data": d.isoformat(),
             "concelho": partes[0] if partes else "",
             "distrito": distrito_de(partes[-1] if len(partes) > 1 else reg["local"]),
-            "distancias": categorias(kms_de([reg.get("texto", "")]), tipos + " " + reg.get("texto", "")),
+            "distancias": ", ".join(x for x in ORDEM if x in cats) if (cats - {"Caminhada"}) else categorias(kms_de([reg.get("texto", "")]), tipos),
             "hora": reg.get("hora", ""),
             "info": u,
             "inscricao": reg.get("site", ""),
