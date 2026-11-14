@@ -615,3 +615,6 @@ body.modo-seguir>*:not(#seguir):not(#toast){display:none !important}
 .agsel .chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
 #resumo.agenda>.row.between h2{font-size:1.15rem;line-height:1.2}
 #resumo.agenda textarea{width:100%;box-sizing:border-box}
+.vh{left:0;top:0;overflow:hidden;clip:rect(0 0 0 0)}
+.sechero>div{min-width:0}.sechero h1{overflow-wrap:anywhere;hyphens:auto}
+.prevcampos .rotarow{grid-column:1/-1}.prevcampos .rotarow label.linkbtn{white-space:normal}

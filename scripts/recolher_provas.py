@@ -402,7 +402,8 @@ PALAVRAS_VAZIAS = set("trail trails trilho trilhos run running de da do das dos 
 
 def chave_nome(n):
     t = [w for w in norm(n).split() if w not in PALAVRAS_VAZIAS and not re.fullmatch(r"\d+|[ivxlc]+|\d+o|\d+a|20\d\d", w)]
-    return set(t)
+    # plural/singular: "solidarios" = "solidario", "trilhos" = "trilho"
+    return {w[:-1] if len(w) > 4 and w.endswith("s") else w for w in t}
 
 
 def parecidas(a, b):

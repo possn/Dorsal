@@ -14,6 +14,8 @@ const DIAS=["domingo","segunda","terça","quarta","quinta","sexta","sábado"];
 const REGIOES=[["norte","Norte",["Viana do Castelo","Braga","Porto","Vila Real","Bragança"]],["centro","Centro",["Aveiro","Viseu","Guarda","Coimbra","Castelo Branco","Leiria"]],["lisboa","Lisboa e Vale do Tejo",["Lisboa","Santarém","Setúbal"]],["alentejo","Alentejo",["Portalegre","Évora","Beja"]],["algarve","Algarve",["Faro"]],["ilhas","Açores e Madeira",["Açores","Madeira"]]];
 const ESTADOS=[["inscrito","Inscrito"],["vou","Vou"],["talvez","Talvez"]];
 const $=id=>document.getElementById(id);
+if(!Element.prototype.replaceChildren)Element.prototype.replaceChildren=function(...n){this.textContent="";this.append(...n)};
+for(const P of [Element.prototype,DocumentFragment.prototype])for(const m of ["append","prepend","replaceChildren"]){const f=P[m];if(f)P[m]=function(...n){return f.apply(this,n.filter(x=>x!=null&&x!==false))}}
 function h(tag,attrs,...kids){const el=document.createElement(tag);if(attrs)for(const[k,v]of Object.entries(attrs)){if(v==null||v===false)continue;if(k==="class")el.className=v;else if(k==="text")el.textContent=v;else if(k.startsWith("on"))el.addEventListener(k.slice(2),v);else el.setAttribute(k,v===true?"":v)}for(const c of kids.flat()){if(c==null||c===false)continue;el.append(c.nodeType?c:document.createTextNode(String(c)))}return el}
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{v==null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}}};
 
@@ -907,13 +909,13 @@ function perfil(id){const box=h("article",{class:"sec est perfil"});
   if(!grupo||!membros[id]){box.append(h("h1",{text:"Membro"}),h("p",{class:"lead",text:"Este membro não está no grupo actual."}),h("a",{class:"btn small",href:"#s=membros",text:"Ver membros"}));return box}
   const ano=String(new Date().getFullYear()),t=estatTotais(id,ano),tudo=estatTotais(id,null),nome=nomeDe(id);
   const stat=(n,l)=>h("div",{class:"st"},h("b",{text:n}),h("span",{text:l}));
-  box.append(h("a",{class:"voltar",href:"#s=membros",text:"‹ Membros"}),
+  box.append(...[h("a",{class:"voltar",href:"#s=membros",text:"‹ Membros"}),
     h("div",{class:"phead"},h("span",{class:"av grande","aria-hidden":"true",text:(nome.trim()[0]||"?").toUpperCase()}),h("div",null,h("h1",{text:nome}),h("p",{class:"hint",text:id===me?"És tu":(grupoNome||"")}))),
     h("div",{class:"meuano"},h("span",{class:"k",text:ano}),h("div",{class:"sts"},stat(String(t.n),t.n===1?"prova":"provas"),stat(fmtKm(t.km),"km"),stat(t.d>=1000?fmtN(Math.round(t.d/100)/10)+"k":String(Math.round(t.d)),"m D+"),t.sg?stat(fmtH(t.sg),"em prova"):null)),
     anelObjetivo(id,t.km,id===me),
     id===me?h("p",{class:"hint terra"},casas[me]?"Sais de "+casaNome(me)+" para as boleias. ":"Ainda não indicaste o teu concelho para as boleias. ",casas[me]?h("button",{class:"linkbtn",type:"button",onclick:()=>guardarCasa(null),text:"Retirar"}):null):null,
     id===me&&!casas[me]?casaSetter():null,
-    ...(tudo.n>t.n?[h("p",{class:"hint",text:"Desde sempre: "+tudo.n+" provas · "+fmtKm(tudo.km)+" km · "+Math.round(tudo.d)+" m D+"})]:[]));
+    ...(tudo.n>t.n?[h("p",{class:"hint",text:"Desde sempre: "+tudo.n+" provas · "+fmtKm(tudo.km)+" km · "+Math.round(tudo.d)+" m D+"})]:[])].filter(Boolean));
   const linhaProva=(p,extra)=>h("li",null,h("button",{class:"linkbtn",type:"button",onclick:()=>abrir(p.id),text:p.nome}),h("small",{text:[dataLonga(p.data),...extra].filter(Boolean).join(" · ")}));
   const prox=futuras().filter(p=>pres[p.id]&&pres[p.id][id]).sort((a,b)=>a.data.localeCompare(b.data));
   box.append(h("h2",{text:"Próximas provas"}),prox.length?h("ul",{class:"plist"},...prox.map(p=>{const x=exDe(p.id,id),e=pres[p.id][id];
