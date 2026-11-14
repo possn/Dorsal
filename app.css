@@ -618,3 +618,14 @@ body.modo-seguir>*:not(#seguir):not(#toast){display:none !important}
 .vh{left:0;top:0;overflow:hidden;clip:rect(0 0 0 0)}
 .sechero>div{min-width:0}.sechero h1{overflow-wrap:anywhere;hyphens:auto}
 .prevcampos .rotarow{grid-column:1/-1}.prevcampos .rotarow label.linkbtn{white-space:normal}
+/* prazos de inscrição */
+.prazo{display:inline-block;margin-top:6px;font-size:.82rem;font-weight:600;color:#8a5a00;background:#fff3d6;border-radius:8px;padding:3px 8px}
+.prazo.urg{color:#fff;background:var(--accent)}
+.prazo.grande{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:10px 0;padding:10px 12px;font-size:.92rem;border-radius:12px}
+.prazo.grande small{display:block;font-weight:500;opacity:.85;margin-top:2px}
+.prazo.grande .linkbtn{color:inherit;flex:none}
+.prazo.passou{background:var(--chip);color:var(--muted,#6b746d)}
+.prazoadd{margin:8px 0 2px;font-size:.88rem}
+.prazoform{display:flex;flex-direction:column;gap:8px;margin:10px 0;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--card,#fff)}
+.prazoform .row{flex-wrap:wrap;gap:8px}.prazoform input[type=text]{flex:1;min-width:160px}
+@media (prefers-color-scheme:dark){.prazo{color:#ffd58a;background:#3a2c10}.prazo.urg{color:#fff;background:var(--accent)}}

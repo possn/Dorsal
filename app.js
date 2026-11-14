@@ -27,7 +27,7 @@ function marcarLida(pid,id){if(!id)return;const L=lidas()||{};if((L[pid]||0)<id)
 let objetivos={},casas={},desafios=[];let provas=[],membros={},pres={},cliques={},loaded=false;
 let histTodas=false,vistaCal=store.get("dorsal.vista")==="cal",calMes=null,calDia=null;
 let filtroReg=store.get("dorsal.regiao")||"",filtroDist=store.get("dorsal.distrito")||"";
-let casa=null;try{casa=JSON.parse(store.get("dorsal.casa")||"null")}catch(_){}
+let prazos={};let casa=null;try{casa=JSON.parse(store.get("dorsal.casa")||"null")}catch(_){}
 let filtroRaio=+(store.get("dorsal.raio")||0);let filtroTipos=new Set((store.get("dorsal.tipos")||"").split("|").filter(Boolean));
 const TIPOS_ORDEM=["Caminhada","Trail kids","Trail curto","Trail longo","Trail ultra","Skyrunning","Backyard"];
 const RAIOS=[5,10,15,20,50,100];
@@ -75,7 +75,7 @@ async function carregar(){
     const hoje=hojeISO();
     const reqs=[api("provas?select=*&data=gte."+hoje+"&order=data.asc,nome.asc")];
     if(grupo)reqs.push(api("grupos?select=nome,logo&codigo=eq."+grupo),api("membros?select=id,nome,objetivo_km,casa&order=nome.asc"),api("presencas?select=membro_id,prova_id,estado,percurso,boleia,lugares,tempo,km,dplus"),api("cliques?select=prova_id"),api("comentarios?select=prova_id,id,membro_id").catch(()=>[]),api("trilhos?select=prova_id,membro_id").catch(()=>[]));
-    const [ps,gs,ms,pr,cl,co,tr]=await Promise.all(reqs);if(grupo)verAdmin().then(()=>{if(!$("editarGrupo").hidden)painelAdmin()});if(grupo)api("desafios?select=*&order=fim.asc").then(r=>{const n=JSON.stringify(r||[]);if(n!==JSON.stringify(desafios)){desafios=r||[];draw()}}).catch(()=>{});if(tr){temTrilho=new Set(tr.map(x=>x.prova_id+"|"+x.membro_id))}
+    const [ps,gs,ms,pr,cl,co,tr]=await Promise.all(reqs);if(grupo)verAdmin().then(()=>{if(!$("editarGrupo").hidden)painelAdmin()});if(grupo)api("prazos?select=prova_id,fecho,nota").then(r=>{const o={};for(const z of r||[])o[z.prova_id]=z;if(JSON.stringify(o)!==JSON.stringify(prazos)){prazos=o;draw()}}).catch(()=>{});if(grupo)api("desafios?select=*&order=fim.asc").then(r=>{const n=JSON.stringify(r||[]);if(n!==JSON.stringify(desafios)){desafios=r||[];draw()}}).catch(()=>{});if(tr){temTrilho=new Set(tr.map(x=>x.prova_id+"|"+x.membro_id))}
     provas=ps||[];
     if(grupo){
       if(!gs||!gs.length){status("Esse código de grupo não existe. Confirma o link que recebeste.");esquecerGrupo(grupo);store.set("dorsal.grupo",null);grupo=null;membros={};pres={};}
@@ -108,7 +108,8 @@ function coordsDe(p){if(!p.distrito||!p.concelho)return null;const k=p.concelho+
   let r=null;for(const [tab,c] of ordem){const f=tab.find(x=>x[0]===c&&x[1]===p.distrito);if(f){r=[f[2],f[3]];break}}
   return geoMemo[k]=r}
 function distKm(a,b){const R=6371,rad=x=>x*Math.PI/180,dLa=rad(b[0]-a[0]),dLo=rad(b[1]-a[1]);const s=Math.sin(dLa/2)**2+Math.cos(rad(a[0]))*Math.cos(rad(b[0]))*Math.sin(dLo/2)**2;return 2*R*Math.asin(Math.sqrt(s))}
-function kmAte(p){if(!casa)return null;const c=coordsDe(p);return c?distKm([casa.lat,casa.lon],c):null}
+function casaEf(){if(casa)return casa;const c=me&&casas[me]?casaCoord(me):null;return c?{nome:casaNome(me),lat:c[0],lon:c[1],auto:1}:null}
+function kmAte(p){const k=casaEf();if(!k)return null;const c=coordsDe(p);return c?distKm([k.lat,k.lon],c):null}
 function concelhoMaisPerto(lat,lon){let best=null,bd=1e9;for(const c of LUG.c){const d=distKm([lat,lon],[c[2],c[3]]);if(d<bd){bd=d;best=c}}return best}
 function definirCasa(c){casa=c;store.set("dorsal.casa",c?JSON.stringify(c):null);if(c&&!filtroRaio){filtroRaio=50;store.set("dorsal.raio","50")}draw()}
 
@@ -1153,9 +1154,27 @@ function card(p){const d=parseD(p.data),q=quem(p.id);
     h("div",{class:"info"},tr?h("span",{class:"tagtreino",text:"Treino do grupo"+(p.hora?" · "+p.hora:"")}):null,h("h3",null,h("button",{class:"titlebtn",onclick:()=>abrir(p.id),text:p.nome})),
       tr&&p.nota?h("div",{class:"ponto",text:"📍 "+p.nota}):null,
       h("div",{class:"meta"},h("strong",{text:[p.concelho,p.distrito].filter(Boolean).join(", ")||"Local por confirmar"}),"  ·  ",h("span",{class:dias<=7?"cd urg":"cd",text:faltam(p.data)}),(kmAte(p)!=null?"  ·  ≈ "+Math.round(kmAte(p))+" km de casa":"")+(p.nota&&!tr?"  ·  "+p.nota:"")),
+      prazoBadge(p),
       p.distancias?(()=>{const t=String(p.distancias).split(",").map(s=>s.trim()).filter(Boolean),M=t.length>3?2:3;return h("div",{class:"dist"},...t.slice(0,M).map(s=>h("span",{text:s})),t.length>M?h("span",{class:"mais",title:t.slice(M).join(", "),text:"+"+(t.length-M)}):null)})():null,
       people.childNodes.length?people:null,h("div",{class:"accao"},seg,links),
       n?h("div",{class:"owner",text:n+(n===1?" clique":" cliques")+" do grupo no link de inscrição"}):null))}
+function diasAte(iso){return Math.round((parseD(iso)-hoje())/864e5)}
+function prazoBadge(p){const z=prazos[p.id];if(!z||eTreino(p))return null;const n=diasAte(z.fecho),q=quem(p.id);if(n<0||n>21)return null;
+  const d=parseD(z.fecho);return h("div",{class:"prazo"+(n<=3?" urg":"")},"⏳ Inscrições "+(n===0?"fecham hoje":n===1?"fecham amanhã":"até "+d.getDate()+" "+MESES[d.getMonth()].slice(0,3)+" ("+n+" dias)")+(z.nota?" · "+z.nota:""))}
+let prazoEdit=null;
+function prazoView(p){const z=prazos[p.id];
+  if(prazoEdit===p.id||(!z&&prazoEdit==="novo:"+p.id)){
+    const di=h("input",{type:"date",value:z?z.fecho:"",max:p.data,min:hojeISO(),"aria-label":"Data em que fecham as inscrições"}),ni=h("input",{type:"text",maxlength:"80",placeholder:"Nota (opcional): sobe 5 € a 1 dez",value:z&&z.nota||""});
+    return h("form",{class:"prazoform",onsubmit:async e=>{e.preventDefault();const f=di.value;if(!/^\d{4}-\d{2}-\d{2}$/.test(f)){toast("Escolhe a data.");return}if(f>p.data){toast("A data tem de ser antes da prova.");return}
+        const body={grupo,prova_id:p.id,fecho:f,nota:ni.value.trim()||null,criado_por:me||null};
+        try{await api("prazos?on_conflict=grupo,prova_id",{method:"POST",prefer:"resolution=merge-duplicates,return=minimal",body});prazos[p.id]={prova_id:p.id,fecho:f,nota:body.nota};prazoEdit=null;toast("Prazo guardado. Quem marcou vou ou talvez recebe aviso 3 dias antes e na véspera.");draw()}catch(_){toast("Não foi possível guardar.")}}},
+      h("strong",{text:"Quando fecham as inscrições?"}),h("div",{class:"row"},di,ni),
+      h("div",{class:"row"},h("button",{class:"btn primary small",type:"submit",text:"Guardar"}),h("button",{class:"btn small",type:"button",onclick:()=>{prazoEdit=null;draw()},text:"Cancelar"}),
+        z?h("button",{class:"linkbtn",type:"button",onclick:async()=>{try{await api("prazos?grupo=eq."+grupo+"&prova_id=eq."+encodeURIComponent(p.id),{method:"DELETE",prefer:"return=minimal"});delete prazos[p.id];prazoEdit=null;toast("Prazo retirado");draw()}catch(_){toast("Não foi possível retirar.")}},text:"Retirar prazo"}):null))}
+  if(!z)return podeMarcar()?h("button",{class:"linkbtn prazoadd",type:"button",onclick:()=>{prazoEdit="novo:"+p.id;draw()},text:"⏳ Indicar quando fecham as inscrições"}):null;
+  const n=diasAte(z.fecho),d=parseD(z.fecho);
+  return h("div",{class:"prazo grande"+(n>=0&&n<=3?" urg":"")+(n<0?" passou":"")},h("span",null,"⏳ ",n<0?"As inscrições fecharam a "+d.getDate()+" de "+MESES[d.getMonth()]:"Inscrições até "+DIAS[d.getDay()]+", "+d.getDate()+" de "+MESES[d.getMonth()]+" · "+(n===0?"fecham hoje":n===1?"fecham amanhã":"faltam "+n+" dias"),z.nota?h("small",{text:z.nota}):null),
+    podeMarcar()?h("button",{class:"linkbtn",type:"button",onclick:()=>{prazoEdit=p.id;draw()},text:"Mudar"}):null)}
 function detalhe(pid){const box=$("view-prova");box.replaceChildren();
   const voltar=h("button",{class:"back",onclick:fechar,text:"← Provas"});
   const p=provas.find(x=>x.id===pid)||passadas.find(x=>x.id===pid);
@@ -1183,6 +1202,7 @@ function detalhe(pid){const box=$("view-prova");box.replaceChildren();
         p.distancias?h("div",{class:"dist"},...String(p.distancias).split(",").map(s=>s.trim()).filter(Boolean).map(s=>h("span",{text:s}))):null,
         h("div",{class:"links"},insc?h("a",{href:insc,target:"_blank",rel:"noopener",onclick:()=>cliqueInsc(p.id),text:"Inscrição ↗"}):eTreino(p)?null:h("span",{class:"hint",text:"Sem link de inscrição"}),info?h("a",{href:info,target:"_blank",rel:"noopener",text:eTreino(p)?"Percurso ↗":"Informação ↗"}):null))),
     podeMarcar()?h("div",{class:"eu"},h("span",{class:"hint",text:"A tua presença"}),segDe(p)):null,
+    (grupo&&!eTreino(p)&&parseD(p.data)>=hoje())?prazoView(p):null,
     h("div",{class:"acoes icons"},
       h("a",{class:"acao",href:"data:text/calendar;charset=utf-8,"+encodeURIComponent(icsDe(p)),download:p.id+".ics"},ic("calendario"),h("span",{text:"Calendário"})),
       h("button",{class:"acao",type:"button",onclick:()=>partilhar(p)},ic("partilhar"),h("span",{text:"Partilhar"})),
@@ -1262,13 +1282,13 @@ function draw(){
   const semTipo=fut.filter(p=>!tiposDe(p).length).length;
   $("tiposTxt").textContent=filtroTipos.size&&semTipo?semTipo+(semTipo===1?" prova ainda sem percursos publicados continua":" provas ainda sem percursos publicados continuam")+" na lista, para não as perderes.":"";$("tiposTxt").hidden=!$("tiposTxt").textContent;
   $("tipos").prepend(h("button",{type:"button",class:"chip-reg","aria-pressed":String(!filtroTipos.size),onclick:()=>{filtroTipos.clear();store.set("dorsal.tipos",null);draw()}},"Todos os percursos"));
-  $("raios").replaceChildren(...[0,...RAIOS].map(r=>h("button",{type:"button",class:"chip-reg","aria-pressed":String(filtroRaio===r),disabled:!casa&&r?true:null,onclick:()=>{filtroRaio=r;store.set("dorsal.raio",r?String(r):null);draw()}},r?"até "+r+" km":"Qualquer distância")));
+  $("raios").replaceChildren(...[0,...RAIOS].map(r=>h("button",{type:"button",class:"chip-reg","aria-pressed":String(filtroRaio===r),disabled:!casaEf()&&r?true:null,onclick:()=>{filtroRaio=r;store.set("dorsal.raio",r?String(r):null);draw()}},r?"até "+r+" km":"Qualquer distância")));
   const semLocal=fut.filter(p=>!coordsDe(p)).length;
-  $("casaTxt").replaceChildren(...(casa?["Casa: ",h("strong",{text:casa.nome}),". ",h("button",{type:"button",class:"linkbtn",onclick:()=>{definirCasa(null);filtroRaio=0;store.set("dorsal.raio",null);draw()},text:"Esquecer"}),
+  $("casaTxt").replaceChildren(...(!casa&&casaEf()?["Casa: ",h("strong",{text:casaEf().nome}),", a tua terra das boleias. "]:[]),...(casa?["Casa: ",h("strong",{text:casa.nome}),". ",h("button",{type:"button",class:"linkbtn",onclick:()=>{definirCasa(null);filtroRaio=0;store.set("dorsal.raio",null);draw()},text:"Esquecer"}),
     " Distância em linha recta até ao centro do concelho da prova, por isso é aproximada."+(filtroRaio&&semLocal?" "+semLocal+(semLocal===1?" prova sem local conhecido fica":" provas sem local conhecido ficam")+" de fora.":"")]:["Escolhe a tua localização ou o teu concelho para filtrar por distância. Fica só neste telemóvel."]));
   if(!$("concelhosList").options.length)$("concelhosList").replaceChildren(...LUG.c.map(c=>h("option",{value:c[4]+" ("+c[1]+")"})));
-  {const nf=(filtroRaio&&casa?1:0)+($("fDistrito").value?1:0)+($("fMes").value?1:0);$("maisBtn").textContent=nf?"Filtros ("+nf+")":"Filtros";$("maisBtn").classList.toggle("on",!!nf)}
-  const todas=fut.filter(p=>!eTreino(p)&&naReg(p)&&(!filtroRaio||!casa||(kmAte(p)!=null&&kmAte(p)<=filtroRaio))&&(!filtroTipos.size||!tiposDe(p).length||tiposDe(p).some(t=>filtroTipos.has(t)))&&(!fd||p.distrito===fd)&&(!fm||p.data.slice(0,7)===fm)&&bate(p));
+  {const nf=(filtroRaio&&casaEf()?1:0)+($("fDistrito").value?1:0)+($("fMes").value?1:0);$("maisBtn").textContent=nf?"Filtros ("+nf+")":"Filtros";$("maisBtn").classList.toggle("on",!!nf)}
+  const todas=fut.filter(p=>!eTreino(p)&&naReg(p)&&(!filtroRaio||!casaEf()||(kmAte(p)!=null&&kmAte(p)<=filtroRaio))&&(!filtroTipos.size||!tiposDe(p).length||tiposDe(p).some(t=>filtroTipos.has(t)))&&(!fd||p.distrito===fd)&&(!fm||p.data.slice(0,7)===fm)&&bate(p));
   if(vistaCal)calendario(todas,$("todasList"));else listaPorMes(todas,$("todasList"),fut.length?"Nenhuma prova com estes filtros.":"Ainda não há provas.");
   fillSel($("fMes"),"Todos os meses",[...new Set(fut.map(p=>p.data.slice(0,7)))].sort().map(m=>[m,MESES[+m.slice(5)-1]+" "+m.slice(0,4)]));
   $("view-nova").querySelectorAll("input,select,button").forEach(el=>el.disabled=!podeMarcar());

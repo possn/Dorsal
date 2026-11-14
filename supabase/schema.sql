@@ -294,3 +294,9 @@ grant update (casa) on public.membros to anon, authenticated;
 -- O Supabase vai buscar esse ficheiro (pg_cron 'dorsal-importar-pedir' às 05:35 e 'dorsal-importar-processar' às 05:45 UTC)
 -- com importar_github_pedir() / importar_github_processar(), que chamam _importar_provas (só insere provas novas
 -- do calendário público e só preenche campos vazios; nunca apaga nem altera provas de grupos).
+
+-- ---------- prazos de inscrição ----------
+-- Tabela prazos (grupo, prova_id, fecho, nota, criado_por): quando fecham as inscrições ou sobe o preço.
+-- RLS por grupo_atual(); a função notificar (tipo "lembretes", pg_cron 18h) avisa quem marcou vou/talvez 3 dias antes e na véspera.
+-- admin_novo_codigo muda também prazos.grupo.
+-- Grupo de demonstração "Trilheiros da Serra" (código começa por "demo"), com nomes fictícios, para mostrar a app.

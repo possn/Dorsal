@@ -109,8 +109,9 @@ async function lembretes() {
   const lx = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Lisbon" }));
   lx.setDate(lx.getDate() + 1);
   const amanha = `${lx.getFullYear()}-${String(lx.getMonth() + 1).padStart(2, "0")}-${String(lx.getDate()).padStart(2, "0")}`;
+  const avisosPrazo = await prazos(lx).catch((e) => { console.error("prazos", e); return 0; });
   const provas = await db(`provas?data=eq.${amanha}&select=id,nome,concelho,hora,fonte`);
-  if (!provas || !provas.length) return { enviadas: 0, motivo: "sem provas amanhã" };
+  if (!provas || !provas.length) return { enviadas: 0, prazos: avisosPrazo, motivo: "sem provas amanhã" };
   const ids = provas.map((p: { id: string }) => `"${encodeURIComponent(p.id)}"`).join(",");
   const pres = await db(`presencas?prova_id=in.(${ids})&estado=in.(inscrito,vou)&select=grupo,membro_id,prova_id,estado,percurso`);
   let enviadas = 0;
@@ -128,7 +129,31 @@ async function lembretes() {
     });
     enviadas += await enviar(subs, payload);
   }
-  return { enviadas, provas: provas.length };
+  return { enviadas, prazos: avisosPrazo, provas: provas.length };
+}
+
+// Inscrições a fechar: avisa quem marcou "vou" ou "talvez" 3 dias antes e na véspera do fecho.
+async function prazos(amanhaLx: Date) {
+  const d = (n: number) => { const x = new Date(amanhaLx); x.setDate(x.getDate() - 1 + n); return iso(x); };
+  const alvo = [d(1), d(3)];
+  const ps = await db(`prazos?fecho=in.(${alvo.join(",")})&select=grupo,prova_id,fecho,nota,provas(nome,data)`);
+  let enviadas = 0;
+  for (const z of ps || []) {
+    if (!z.provas || z.provas.data < d(0)) continue;
+    const quem = await db(`presencas?grupo=eq.${z.grupo}&prova_id=eq.${encodeURIComponent(z.prova_id)}&estado=in.(vou,talvez)&select=membro_id,estado`);
+    for (const x of quem || []) {
+      if (!(await primeiraVez(`prazo:${z.grupo}:${x.membro_id}:${z.prova_id}:${z.fecho}`))) continue;
+      const subs = await db(`subscricoes?grupo=eq.${z.grupo}&membro_id=eq.${x.membro_id}&select=endpoint,p256dh,auth`);
+      if (!subs || !subs.length) continue;
+      const amanhaFecha = z.fecho === d(1);
+      enviadas += await enviar(subs, JSON.stringify({
+        title: `Inscrições ${amanhaFecha ? "fecham amanhã" : "fecham daqui a 3 dias"}: ${z.provas.nome}`,
+        body: (z.nota ? z.nota + ". " : "") + (x.estado === "talvez" ? "Marcaste talvez: está na hora de decidir." : "Marcaste que vais, mas ainda não estás inscrito."),
+        url: `./?g=${z.grupo}#p=${encodeURIComponent(z.prova_id)}`, tag: `prazo-${z.prova_id}`,
+      }));
+    }
+  }
+  return enviadas;
 }
 
 const DSEM = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
