@@ -1,5 +1,7 @@
 name: Explorar fontes de provas (temporário)
 on: workflow_dispatch
+permissions:
+  contents: write
 jobs:
   explorar:
     runs-on: ubuntu-latest
@@ -18,12 +20,16 @@ jobs:
           get gt_p2.html "https://gotrail.run/calendario-trail-running/portugal?page=2"
           get gt_robots.txt "https://gotrail.run/robots.txt"
           get gt_sitemap.xml "https://gotrail.run/sitemap.xml"
+          get tp_eventos2.html "https://www.trilhoperdido.com/eventos?page=2"
           get rl_p1.html "https://running.life/trail-running-calendar/portugal"
           get atrp.html "https://www.atrp.pt/calendario"
           get sg.html "https://stopandgo.net/events"
           get lap.html "https://lap2go.com/pt/event/list"
           ls -la paginas
-      - uses: actions/upload-artifact@v4
-        with:
-          name: paginas
-          path: paginas
+      - name: Guardar no ramo fontes-exploracao
+        run: |
+          cd paginas
+          git init -q -b fontes-exploracao
+          git config user.name "dorsal-bot"; git config user.email "dorsal-bot@users.noreply.github.com"
+          git add -A && git commit -qm "páginas $(date -u +%F)"
+          git push -qf "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" fontes-exploracao
