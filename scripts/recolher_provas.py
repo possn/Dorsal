@@ -79,16 +79,18 @@ def get(url, espera=1.2):
     for tentativa in range(3):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept-Language": "pt-PT,pt;q=0.9"})
-            with urllib.request.urlopen(req, timeout=40) as r:
+            with urllib.request.urlopen(req, timeout=25) as r:
                 _ultimo[host] = time.time()
                 return r.read().decode("utf-8", "ignore")
         except urllib.error.HTTPError as e:
             _ultimo[host] = time.time()
             if e.code in (404, 410):
                 return None
-            time.sleep(3 * (tentativa + 1))
+            time.sleep(2 * (tentativa + 1))
         except Exception:
-            time.sleep(3 * (tentativa + 1))
+            if tentativa >= 1:
+                break
+            time.sleep(2)
     log("falhou:", url)
     return None
 
@@ -316,7 +318,9 @@ def portugalrunning(cache):
         return []
     urls = re.findall(r"<url>\s*<loc>([^<]+)</loc>\s*(?:<lastmod>([^<]+)</lastmod>)?", sm)
     log(f"Portugal Running: {len(urls)} eventos no sitemap")
-    out, novos = [], 0
+    out, novos, t0 = [], 0, time.time()
+    # mais recentes primeiro; orçamento de tempo para não esgotar o processo
+    urls.sort(key=lambda x: x[1] or "", reverse=True)
     for u, lm in urls:
         lm = (lm or "")[:10]
         if lm and lm < (HOJE - dt.timedelta(days=500)).isoformat():
@@ -325,10 +329,12 @@ def portugalrunning(cache):
         if c and c.get("lm") == lm:
             reg = c.get("reg")
         else:
-            if novos >= 450:
+            if novos >= 250 or time.time() - t0 > 14 * 60:
                 continue
-            p = get(u, 1.0)
+            p = get(u, 0.8)
             novos += 1
+            if novos % 50 == 0:
+                log(f"Portugal Running: {novos} páginas lidas ({int(time.time() - t0)} s)")
             reg = None
             if p:
                 ev = [x for x in ld_json(p) if x.get("@type") in ("SportsEvent", "Event")]

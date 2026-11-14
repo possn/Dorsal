@@ -9,7 +9,7 @@ concurrency: recolher-provas
 jobs:
   recolher:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
