@@ -460,9 +460,12 @@ def main():
             log("erro na fonte", nome, repr(e))
     json.dump(cache, open(cache_f, "w"), ensure_ascii=False)
     todas = [p for p in todas if p.get("nome") and HOJE.isoformat() <= p["data"] <= LIMITE.isoformat()]
+    todas = [p for p in todas if not re.search(r"canicross|chamonix|mont blanc|espanha|spain|galiza|galicia", norm(p["nome"] + " " + p.get("concelho", "")))]
     for p in todas:
         if not p.get("distrito"):
             p["distrito"] = distrito_por_local(p.get("concelho", ""))
+    # fora de Portugal: sem distrito conhecido e vindo só do Portugal Running (que também lista provas no estrangeiro)
+    todas = [p for p in todas if p.get("distrito") or p["fonte"] != "portugalrunning.com"]
     juntas = juntar(todas)
     ex = existentes()
     novas, completar = [], []
