@@ -286,7 +286,7 @@ async function guardarTrilho(pid,g){
   const campos={km:Math.round(g.km*10)/10,dplus:g.dplus};if(g.duracao_s)campos.tempo=hms(g.duracao_s);
   await api("presencas?membro_id=eq."+me+"&prova_id=eq."+encodeURIComponent(pid),{method:"PATCH",prefer:"return=minimal",body:campos});
   temTrilho.add(pid+"|"+me);delete trilhosP[pid];if(mapas[pid]){try{mapas[pid].map.remove()}catch(_){}delete mapas[pid]}}
-async function importarGPX(pid,file){try{const g=DorsalGPX.ler(await file.text());
+async function importarGPX(pid,file){try{const g=await DorsalGPX.lerFicheiro(file);
     if(!confirm("GPX lido: "+String(g.km).replace(".",",")+" km, "+g.dplus+" m D+"+(g.duracao_s?", "+hms(g.duracao_s):"")+". Guardar nesta prova?"))return;
     await guardarTrilho(pid,g);toast("Trilho guardado");await carregar()}catch(err){toast(err&&err.message&&!err.status?err.message:"Não foi possível guardar o trilho.")}}
 function carregarTrilhos(pid){trilhosP[pid]={estado:"a",lista:[]};api("trilhos?select=membro_id,km,dplus,dminus,duracao_s,pontos,elev&prova_id=eq."+encodeURIComponent(pid))
@@ -315,12 +315,65 @@ function trilhosView(p){if(!grupo||!ONLINE||parseD(p.data)>hoje())return null;if
   let perfil=null;if(T.lista.length){perfil=DorsalGPX.perfilSVG(T.lista.map((t,i)=>({coords:DorsalGPX.descodificar(t.pontos),elev:t.elev,cor:CORES[i%CORES.length]})))}
   return h("section",{class:"grupo-bloco trilhos"},h("div",{class:"row between"},h("h3",null,"Trilhos GPS ",h("span",{class:"n",text:T.lista.length?String(T.lista.length):""})),imp),
     T.estado==="a"?h("p",{class:"hint",text:"A carregar…"}):T.lista.length?h("div",null,mapaTrilhos(p.id,T.lista),perfil,h("ul",{class:"tlista"},...linhas)):
-    h("p",{class:"hint",text:"Ninguém importou ainda o trilho desta prova. Exporta o GPX do relógio, do Strava ou do Wikiloc e importa-o aqui: a app calcula km, D+, tempo e ritmo."}))}
+    h("p",{class:"hint",text:"Ninguém importou ainda o trilho desta prova. Exporta o GPX (ou FIT/TCX) do relógio, da Zepp, do Strava ou do Wikiloc e importa-o aqui: a app calcula km, D+, tempo e ritmo."}))}
 
 function descarregarGPX(p,t){const c=DorsalGPX.descodificar(t.pontos),el=t.elev?t.elev.split(","):[];const esc=s=>String(s).replace(/[<>&]/g,m=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[m]));
   const gpx='<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Dorsal" xmlns="http://www.topografix.com/GPX/1/1"><metadata><name>'+esc(p.nome)+'</name></metadata><trk><name>'+esc(p.nome+" · "+nomeDe(t.membro_id))+'</name><trkseg>'+
     c.map((x,i)=>'<trkpt lat="'+x[0].toFixed(5)+'" lon="'+x[1].toFixed(5)+'">'+(el[i]!=null&&el.length===c.length?'<ele>'+el[i]+'</ele>':'')+'</trkpt>').join("")+'</trkseg></trk></gpx>';
   const url=URL.createObjectURL(new Blob([gpx],{type:"application/gpx+xml"}));const a=h("a",{href:url,download:(p.nome+"-"+nomeDe(t.membro_id)).normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-zA-Z0-9]+/g,"-")+".gpx"});document.body.append(a);a.click();setTimeout(()=>{a.remove();URL.revokeObjectURL(url)},2000)}
+
+// ---------- importar do relógio: reconhece a prova, pergunta e guarda ----------
+const isoDia=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+function preencherRegisto(g){regGPX=g;if(g.nome)regDraft.rNome=g.nome;if(g.inicio)regDraft.rData=isoDia(g.inicio);
+  regDraft.rKm=String(Math.round(g.km*10)/10).replace(".",",");regDraft.rD=String(g.dplus);if(g.duracao_s)regDraft.rTempo=hms(g.duracao_s);
+  const c=g.ini||DorsalGPX.descodificar(g.pontos)[0],cc=c&&concelhoMaisPerto(c[0],c[1]);if(cc){regDraft.rConc=cc[4];regDraft.rDist=cc[1]}}
+function candidatas(g){const dia=g.inicio?isoDia(g.inicio):null,c0=g.ini||null,hj=hojeISO();const vistos=new Set();
+  return [...passadas,...provas].filter(p=>{if(vistos.has(p.id)||p.data>hj)return false;vistos.add(p.id);
+      if(dia)return Math.abs((parseD(p.data)-parseD(dia))/864e5)<=1;return !!(pres[p.id]&&pres[p.id][me])&&diasAte(p.data)>=-45})
+    .map(p=>{const pc=coordsDe(p),dk=c0&&pc?distKm(c0,pc):null,marcado=!!(pres[p.id]&&pres[p.id][me]);
+      let sc=(marcado?4:0)+(dia&&p.data===dia?2:0)+(dk==null?0:dk<25?4:dk<60?2:dk>150?-4:0)+(eTreino(p)?-1:0);return {p,dk,marcado,sc}})
+    .filter(x=>x.sc>0||(x.marcado&&(x.dk==null||x.dk<150))).sort((a,b)=>b.sc-a.sc).slice(0,4)}
+function abrirImportacao(g,pidSug){document.querySelector(".impov")?.remove();
+  const fechar=()=>ov.remove();const cc=g.ini&&concelhoMaisPerto(g.ini[0],g.ini[1]);
+  const resumo=[String(g.km).replace(".",",")+" km",g.dplus?g.dplus+" m D+":"",g.duracao_s?hms(g.duracao_s):"",g.inicio?dataLonga(isoDia(g.inicio)):"",cc?"perto de "+cc[4]:""].filter(Boolean).join(" · ");
+  const guardarEm=async(p,b)=>{if(b)b.disabled=true;try{await guardarTrilho(p.id,g);marcaFiz(p.id,"sim");fechar();toast("Guardado em "+p.nome+". Já conta para os teus totais.");await carregar();abrir(p.id)}catch(e){if(b)b.disabled=false;toast("Não foi possível guardar. Tenta outra vez.")}};
+  let cand=candidatas(g);if(pidSug){const ps=[...passadas,...provas].find(x=>x.id===pidSug);if(ps){cand=cand.filter(x=>x.p.id!==pidSug);const pc=coordsDe(ps);cand.unshift({p:ps,marcado:true,sc:99,dk:g.ini&&pc?distKm(g.ini,pc):null})}}
+  const opc=cand.map((x,i)=>h("button",{type:"button",class:"impcand"+(i===0?" top":""),onclick:e=>guardarEm(x.p,e.currentTarget)},
+    h("strong",{text:x.p.nome}),h("span",{text:dataLonga(x.p.data)+([x.p.concelho].filter(Boolean).length?" · "+x.p.concelho:"")+(x.marcado?" · estavas marcado":"")+(x.dk!=null?(x.dk<3?" · começa aqui":" · início a "+Math.round(x.dk)+" km"):"")})));
+  const ov=h("div",{class:"impov",role:"dialog","aria-modal":"true","aria-label":"Importar trilho"},h("div",{class:"impbox"},
+    h("div",{class:"row between"},h("h2",{text:"⌚ Trilho lido"}),h("button",{class:"linkbtn",type:"button",onclick:fechar,"aria-label":"Fechar",text:"✕"})),
+    h("p",{class:"impres",text:resumo}),
+    g.pontos?DorsalGPX.perfilSVG([{coords:DorsalGPX.descodificar(g.pontos),elev:g.elev,cor:"#ee5a0f"}]):null,
+    cand.length?h("p",{class:"impq",text:cand.length===1||cand[0].sc>=8?"É desta prova?":"De que prova é?"}):h("p",{class:"impq",text:"Não encontrei nenhuma prova do calendário nesse dia e local."}),
+    ...opc,
+    h("button",{type:"button",class:"btn small",onclick:()=>{preencherRegisto(g);regAberto=true;fechar();if(location.hash)history.pushState(null,"",location.pathname+location.search);tab="grupo";store.set("dorsal.tab",tab);draw();setTimeout(()=>{const f=document.querySelector(".historico");f&&f.scrollIntoView({behavior:"smooth"})},80)},text:cand.length?"Não, é outra: registar prova nova":"Registar como prova feita nova"}),
+    h("p",{class:"hint",text:"O trilho fica visível para o grupo na página da prova, com mapa e perfil."})));
+  ov.addEventListener("click",e=>{if(e.target===ov)fechar()});document.body.append(ov)}
+async function importarDoRelogio(file,pidSug){try{const g=await DorsalGPX.lerFicheiro(file);abrirImportacao(g,pidSug)}catch(e){toast(e&&e.message||"Não consegui ler esse ficheiro.")}}
+function escolherFicheiro(cb){const i=h("input",{type:"file",class:"vh"});i.addEventListener("change",()=>{const f=i.files[0];i.remove();if(f)cb(f)});document.body.append(i);i.click()}
+
+// "Fizeste a prova?" nos dias a seguir a uma prova em que estavas marcado
+function fizEstado(){try{return JSON.parse(store.get("dorsal.fiz."+grupo)||"{}")}catch(_){return {}}}
+function marcaFiz(pid,v){const o=fizEstado();o[pid]=v;store.set("dorsal.fiz."+grupo,JSON.stringify(o))}
+let fizPasso={};
+function fizCartao(){if(!me||!grupo||!podeMarcar())return null;const est=fizEstado();
+  const p=passadas.filter(p=>{const d=diasAte(p.data);if(d>=0||d<-10)return false;const e=pres[p.id]&&pres[p.id][me];if(e!=="inscrito"&&e!=="vou")return false;
+    const x=exDe(p.id,me);if(temTrilho.has(p.id+"|"+me))return false;if(est[p.id]==="nao"||est[p.id]==="ok")return false;if(est[p.id]==="sim"&&(x.tempo||x.km))return false;return true}).sort((a,b)=>b.data<a.data?-1:1)[0];
+  if(!p)return null;const tr=eTreino(p),d=parseD(p.data),quando=diasAte(p.data)===-1?"ontem":DIAS[d.getDay()].toLowerCase()+", "+d.getDate()+" "+MESES[d.getMonth()].slice(0,3);
+  const passo=fizPasso[p.id]||(est[p.id]==="sim"?"gpx":"pergunta");
+  if(passo==="pergunta")return h("div",{class:"fizcard"},h("strong",{text:"🏁 Fizeste "+(tr?"o treino ":"o ")+p.nome+"?"}),h("p",{class:"hint",text:"Foi "+quando+". Confirma para entrar nos teus totais."}),
+    h("div",{class:"row wrap"},h("button",{class:"btn primary small",type:"button",onclick:()=>{marcaFiz(p.id,"sim");fizPasso[p.id]="gpx";draw()},text:"Sim, fiz"}),
+      h("button",{class:"btn small",type:"button",onclick:async e=>{const b=e.currentTarget;if(b.dataset.c!=="1"){b.dataset.c="1";b.textContent="Confirmar: não fui";return}
+        try{await api("presencas?membro_id=eq."+me+"&prova_id=eq."+encodeURIComponent(p.id),{method:"DELETE"});marcaFiz(p.id,"nao");toast("Tirada da tua lista");await carregar()}catch(_){toast("Não foi possível. Tenta outra vez.")}},text:"Não fui"}),
+      h("button",{class:"linkbtn",type:"button",onclick:()=>{marcaFiz(p.id,"ok");draw()},text:"Agora não"})));
+  return h("div",{class:"fizcard"},h("strong",{text:"💪 Boa! Queres juntar o trilho do relógio?"}),h("p",{class:"hint",text:"Carrega o GPX, FIT ou TCX da Zepp, do relógio ou do Strava: a app preenche km, D+ e tempo e mostra o percurso ao grupo."}),
+    h("div",{class:"row wrap"},h("button",{class:"btn primary small",type:"button",onclick:()=>escolherFicheiro(f=>importarDoRelogio(f,p.id)),text:"Carregar ficheiro"}),
+      h("button",{class:"btn small",type:"button",onclick:()=>{marcaFiz(p.id,"ok");editHist=p.id;histTodas=true;draw();setTimeout(()=>{const f=document.querySelector(".editfeita");f&&f.scrollIntoView({behavior:"smooth",block:"center"})},80)},text:"Só o tempo"}),
+      h("button",{class:"linkbtn",type:"button",onclick:()=>{marcaFiz(p.id,"ok");draw()},text:"Agora não"})))}
+// Ficheiro partilhado de outra app (Zepp, Strava…) para o Dorsal, via service worker
+async function receberPartilha(){if(!/[?&]importar=1/.test(location.search))return;history.replaceState(null,"",location.pathname+location.search.replace(/[?&]importar=1/,"").replace(/^&/,"?")+location.hash);
+  try{const c=await caches.open("dorsal-partilha"),r=await c.match("ficheiro");if(!r){toast("Não recebi nenhum ficheiro.");return}const b=await r.blob(),nome=decodeURIComponent(r.headers.get("x-nome")||"trilho.gpx");await c.delete("ficheiro");
+    const espera=()=>{if(!loaded||!grupo||!me){setTimeout(espera,400);return}importarDoRelogio(new File([b],nome))};espera()}catch(_){toast("Não consegui abrir o ficheiro partilhado.")}}
 
 // ---------- estatísticas e conquistas ----------
 let estQuem="eu",estAno=null;
@@ -507,7 +560,7 @@ function prevProva(p){if(!podeMarcar()||!me||!pres[p.id]||!pres[p.id][me])return
     h("label",null,"Partida",inp("hora",{type:"time",placeholder:"08:00",value:val("hora")||p.hora||""})),
     h("label",{class:"full"},"Abastecimentos ao km (opcional)",inp("abs",{inputmode:"decimal",placeholder:"8; 15; 22"})),
     (()=>{const r=rotaDe(p.id);const fi=h("input",{type:"file",class:"vh",id:"rotaF-"+p.id});
-      fi.addEventListener("change",async()=>{const f=fi.files[0];if(!f)return;try{const t=await f.text();const g=DorsalGPX.ler(t);if(!g.elev)toast("O GPX não tem altitude: uso só a distância.");
+      fi.addEventListener("change",async()=>{const f=fi.files[0];if(!f)return;try{const g=await DorsalGPX.lerFicheiro(f);if(!g.elev)toast("O GPX não tem altitude: uso só a distância.");
           store.set("dorsal.rota."+p.id,JSON.stringify({pontos:g.pontos,elev:g.elev,km:g.km,dp:g.dplus,nome:f.name.slice(0,60)}));
           if(!cfg.km)cfg.km=String(g.km).replace(".",",");if(!cfg.dp&&g.dplus)cfg.dp=String(g.dplus);guardar();toast("Percurso carregado: "+String(g.km).replace(".",",")+" km, "+g.dplus+" m D+");draw()}catch(e){toast(e.message||"Não consegui ler o GPX.")}});
       return h("div",{class:"full rotarow"},fi,r?h("span",{class:"hint",text:"✓ Percurso: "+String(r.km).replace(".",",")+" km · "+r.dp+" m D+ "}):null,
@@ -1032,10 +1085,8 @@ function registoForm(){const v=id=>$(id)?$(id).value:"";
         regAberto=false;regDraft={};regGPX=null;toast("Prova registada");await carregar()}
       catch(err){toast("Não foi possível registar. Tenta outra vez.")}finally{b.disabled=false}}},
     h("div",{class:"full gpxpre"},h("label",{class:"btn small",for:"rGpx",text:regGPX?"GPX: "+regGPX.km.toString().replace(".",",")+" km ✓":"Preencher a partir de um GPX"}),h("input",{id:"rGpx",type:"file",class:"vh",onchange:async e=>{const f=e.target.files[0];if(!f)return;
-      try{const g=DorsalGPX.ler(await f.text());regGPX=g;if(g.nome&&!$("rNome").value)regDraft.rNome=g.nome;if(g.inicio)regDraft.rData=g.inicio.getFullYear()+"-"+String(g.inicio.getMonth()+1).padStart(2,"0")+"-"+String(g.inicio.getDate()).padStart(2,"0");
-        regDraft.rKm=String(Math.round(g.km*10)/10).replace(".",",");regDraft.rD=String(g.dplus);if(g.duracao_s)regDraft.rTempo=hms(g.duracao_s);
-        {const c=DorsalGPX.descodificar(g.pontos)[0],cc=c&&concelhoMaisPerto(c[0],c[1]);if(cc){regDraft.rConc=cc[4];regDraft.rDist=cc[1]}}draw()}
-      catch(err){toast(err.message||"Não consegui ler esse GPX.")}}}),h("span",{class:"hint",text:" Lê nome, data, km, D+, tempo e local do ficheiro do relógio, Strava ou Wikiloc."})),
+      try{const g=await DorsalGPX.lerFicheiro(f);preencherRegisto(g);draw()}
+      catch(err){toast(err.message||"Não consegui ler esse GPX.")}}}),h("span",{class:"hint",text:" Lê nome, data, km, D+, tempo e local do ficheiro (GPX, FIT ou TCX) do relógio, Zepp, Strava ou Wikiloc."})),
     h("label",{class:"full",for:"rNome"},"Nome da prova",h("input",{id:"rNome",required:true,maxlength:"120"})),
     h("label",{for:"rData"},"Data",h("input",{id:"rData",type:"date",required:true,max:hojeISO()})),
     h("label",{for:"rPerc"},"Percurso",h("select",{id:"rPerc"},...PERCURSOS.map(x=>h("option",{value:x,text:x})))),
@@ -1092,7 +1143,7 @@ function historico(){if(!grupo||!me)return null;const ano=String(new Date().getF
     return h("li",{class:"hist"},h("div",{class:"hist-top"},h("span",{class:"hd",text:d.getDate()+" "+MESES[d.getMonth()].slice(0,3)+" "+d.getFullYear()}),h("button",{class:"titlebtn",onclick:()=>abrir(p.id),text:p.nome})),
       quem.length?h("div",{class:"people"},...quem.map(id=>{const x=exDe(p.id,id);return h("span",{class:"p inscrito",text:nomeDe(id)+(x.percurso?" · "+x.percurso:"")+(x.km?" · "+fmtN(+x.km)+" km":"")+(x.tempo?" · "+x.tempo:"")+(temTrilho.has(p.id+"|"+id)?" · 📍":"")})})):null,meu)};
   const lista=passadas.filter(p=>!eTreino(p)&&Object.keys(pres[p.id]||{}).some(id=>foiA(p.id,id)));
-  return h("section",{class:"historico"},h("div",{class:"row between"},h("h2",{class:"month",text:"Provas feitas"}),regAberto?null:h("button",{class:"btn small",type:"button",onclick:()=>{regAberto=true;draw();setTimeout(()=>$("rNome")&&$("rNome").focus(),50)},text:"+ Registar prova feita"})),
+  return h("section",{class:"historico"},h("div",{class:"row between"},h("h2",{class:"month",text:"Provas feitas"}),regAberto?null:h("div",{class:"row"},h("button",{class:"btn small primary",type:"button",onclick:()=>escolherFicheiro(f=>importarDoRelogio(f)),text:"⌚ Importar do relógio"}),h("button",{class:"btn small",type:"button",onclick:()=>{regAberto=true;draw();setTimeout(()=>$("rNome")&&$("rNome").focus(),50)},text:"+ Registar à mão"}))),
     regAberto?registoForm():null,
     quadro.length?h("div",{class:"quadro"},h("div",{class:"row between"},h("strong",{text:"Quadro de "+ano}),h("div",{class:"seg"},...[["provas","Provas"],["km","Km"]].map(([k,l])=>h("button",{type:"button","aria-pressed":String(quadroPor===k),onclick:()=>{quadroPor=k;draw()},text:l})))),
       h("ol",null,...quadro.map(([id,t],i)=>h("li",{class:id===me?"eu":null},h("span",{class:"pos",text:String(i+1)}),h("span",{class:"qn",text:nomeDe(id)}),h("span",{class:"qc",text:quadroPor==="km"?fmtN(Math.round(t.km*10)/10)+" km · "+t.n+(t.n===1?" prova":" provas"):t.n+(t.n===1?" prova":" provas")+(t.km?" · "+fmtN(Math.round(t.km*10)/10)+" km":"")}))))):null,
@@ -1266,6 +1317,7 @@ function draw(){
   $("tab-grupo").classList.toggle("temnovas",Object.values(novas).some(Boolean));
   $("pushBtn").hidden=!(me&&ONLINE&&pushSuportado()&&(pushAtivo()||store.get("dorsal.pushdispensa."+grupo)));$("pushBtn").textContent=pushAtivo()?"Desactivar notificações":"Activar notificações";
   if(banner)$("view-grupo").prepend(banner);
+  {const fc=fizCartao();if(fc)$("view-grupo").prepend(fc)}
   {const hs=historico();if(hs)$("view-grupo").append(hs)}
   const reg=REGIOES.find(r=>r[0]===filtroReg),naReg=p=>!reg||reg[2].includes(p.distrito);
   $("regioes").replaceChildren(...[["","Todo o país",null],...REGIOES].map(([id,nome])=>{const n=id?fut.filter(p=>REGIOES.find(r=>r[0]===id)[2].includes(p.distrito)).length:fut.length;
@@ -1485,7 +1537,7 @@ $("novaForm").addEventListener("submit",async e=>{e.preventDefault();if(!podeMar
 
 let ultimaAberta=provaAberta();
 window.addEventListener("hashchange",()=>{const a=provaAberta();if(a&&!ultimaAberta)history.replaceState({dorsal:1},"");ultimaAberta=a;draw();window.scrollTo({top:0})});
-if(SEGUIR)paginaSeguir(SEGUIR);else{draw();carregar()}
+if(SEGUIR)paginaSeguir(SEGUIR);else{draw();carregar();receberPartilha()}
 const aEscrever=()=>{const a=document.activeElement;return !!a&&(a.tagName==="TEXTAREA"||(a.tagName==="INPUT"&&!/checkbox|radio|button/.test(a.type))||a.tagName==="SELECT")};
 setInterval(()=>{if(!SEGUIR&&document.visibilityState==="visible"&&ONLINE&&!aEscrever())carregar()},30000);
 document.addEventListener("visibilitychange",()=>{if(!SEGUIR&&document.visibilityState==="visible"&&ONLINE&&loaded)carregar()});

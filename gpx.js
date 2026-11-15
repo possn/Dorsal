@@ -14,6 +14,7 @@
   function ler(texto) {
     const doc = new DOMParser().parseFromString(texto, "application/xml");
     if (doc.getElementsByTagName("parsererror").length) throw new Error("O ficheiro não é um GPX válido.");
+    if (filhos(doc, "Trackpoint").length) return lerTCXdoc(doc);
     let nos = [...filhos(doc, "trkpt")];
     if (!nos.length) nos = [...filhos(doc, "rtept")];
     if (nos.length < 2) throw new Error("O GPX não tem pontos de trilho suficientes.");
@@ -24,10 +25,82 @@
       const e = filhos(n, "ele")[0], t = filhos(n, "time")[0];
       pts.push({ la, lo, e: e ? parseFloat(e.textContent) : NaN, t: t ? Date.parse(t.textContent) : NaN });
     }
-    if (pts.length < 2) throw new Error("O GPX não tem coordenadas válidas.");
     const nomeEl = filhos(doc, "trk")[0] && filhos(filhos(doc, "trk")[0], "name")[0];
     const metaT = filhos(doc, "metadata")[0] && filhos(filhos(doc, "metadata")[0], "time")[0];
+    return calcular(pts, nomeEl ? nomeEl.textContent : "", metaT ? new Date(metaT.textContent) : null);
+  }
 
+  // TCX (Garmin Training Center): Trackpoint > Position, AltitudeMeters, Time
+  function lerTCXdoc(doc) {
+    const pts = [];
+    for (const n of filhos(doc, "Trackpoint")) {
+      const pos = filhos(n, "Position")[0];
+      if (!pos) continue;
+      const la = parseFloat((filhos(pos, "LatitudeDegrees")[0] || {}).textContent), lo = parseFloat((filhos(pos, "LongitudeDegrees")[0] || {}).textContent);
+      if (!isFinite(la) || !isFinite(lo)) continue;
+      const e = filhos(n, "AltitudeMeters")[0], t = filhos(n, "Time")[0];
+      pts.push({ la, lo, e: e ? parseFloat(e.textContent) : NaN, t: t ? Date.parse(t.textContent) : NaN });
+    }
+    const nm = filhos(doc, "Notes")[0];
+    return calcular(pts, nm ? nm.textContent : "", null);
+  }
+
+  // FIT (formato binário dos relógios): só as mensagens "record" (posição, altitude, hora).
+  function lerFIT(buf) {
+    const v = new DataView(buf), n = v.byteLength;
+    if (n < 14) throw new Error("O ficheiro FIT está vazio.");
+    const hs = v.getUint8(0), tag = String.fromCharCode(v.getUint8(8), v.getUint8(9), v.getUint8(10), v.getUint8(11));
+    if (tag !== ".FIT") throw new Error("O ficheiro não é um FIT válido.");
+    const fim = Math.min(n, hs + v.getUint32(4, true));
+    const defs = {}, pts = [], SC = 180 / 2147483648, EPOCA = 631065600;
+    let o = hs, ultT = 0;
+    while (o < fim) {
+      const h = v.getUint8(o++);
+      if (!(h & 0x80) && (h & 0x40)) { // definição
+        const local = h & 0x0f, dev = h & 0x20;
+        const le = v.getUint8(o + 1) === 0, glob = v.getUint16(o + 2, le), nf = v.getUint8(o + 4);
+        o += 5; const campos = [];
+        for (let i = 0; i < nf; i++, o += 3) campos.push({ num: v.getUint8(o), size: v.getUint8(o + 1), tipo: v.getUint8(o + 2) });
+        let extra = 0;
+        if (dev) { const nd = v.getUint8(o++); for (let i = 0; i < nd; i++, o += 3) extra += v.getUint8(o + 1); }
+        defs[local] = { le, glob, campos, extra };
+        continue;
+      }
+      const comprimido = h & 0x80, local = comprimido ? (h >> 5) & 3 : h & 0x0f, d = defs[local];
+      if (!d) throw new Error("O ficheiro FIT está danificado.");
+      let t = null, la = null, lo = null, alt = null, altE = null;
+      if (comprimido) { const off = h & 0x1f; t = (ultT & ~0x1f) + off; if (off < (ultT & 0x1f)) t += 0x20; }
+      for (const c of d.campos) {
+        if (o + c.size > n) break;
+        if (c.num === 253 && c.size === 4) t = v.getUint32(o, d.le);
+        else if (d.glob === 20) {
+          if (c.num === 0 && c.size === 4) { const x = v.getInt32(o, d.le); if (x !== 0x7fffffff) la = x * SC; }
+          else if (c.num === 1 && c.size === 4) { const x = v.getInt32(o, d.le); if (x !== 0x7fffffff) lo = x * SC; }
+          else if (c.num === 2 && c.size === 2) { const x = v.getUint16(o, d.le); if (x !== 0xffff) alt = x / 5 - 500; }
+          else if (c.num === 78 && c.size === 4) { const x = v.getUint32(o, d.le); if (x !== 0xffffffff) altE = x / 5 - 500; }
+        }
+        o += c.size;
+      }
+      o += d.extra;
+      if (t != null) ultT = t;
+      if (d.glob === 20 && la != null && lo != null && Math.abs(la) <= 90 && Math.abs(lo) <= 180)
+        pts.push({ la, lo, e: altE != null ? altE : alt != null ? alt : NaN, t: t != null ? (t + EPOCA) * 1000 : NaN });
+    }
+    return calcular(pts, "", null);
+  }
+
+  // Escolhe o leitor pelo conteúdo do ficheiro (GPX, TCX ou FIT).
+  async function lerFicheiro(file) {
+    const buf = await file.arrayBuffer();
+    const b = new Uint8Array(buf.slice(0, 12));
+    if (b.length >= 12 && String.fromCharCode(b[8], b[9], b[10], b[11]) === ".FIT") return lerFIT(buf);
+    const texto = new TextDecoder("utf-8").decode(buf);
+    if (!/<(gpx|TrainingCenterDatabase)[\s>]/i.test(texto.slice(0, 4000))) throw new Error("Esse ficheiro não é GPX, TCX nem FIT.");
+    return ler(texto);
+  }
+
+  function calcular(pts, nome, metaInicio) {
+    if (pts.length < 2) throw new Error("O ficheiro não tem pontos de trilho suficientes.");
     // distância acumulada
     let d = 0; const acum = [0];
     for (let i = 1; i < pts.length; i++) { d += dist([pts[i - 1].la, pts[i - 1].lo], [pts[i].la, pts[i].lo]); acum.push(d); }
@@ -52,7 +125,7 @@
     // tempo total
     const tIni = pts.find(p => isFinite(p.t)), tFim = [...pts].reverse().find(p => isFinite(p.t));
     const duracao = tIni && tFim && tFim.t > tIni.t ? Math.round((tFim.t - tIni.t) / 1000) : null;
-    const inicio = tIni ? new Date(tIni.t) : (metaT ? new Date(metaT.textContent) : null);
+    const inicio = tIni ? new Date(tIni.t) : (metaInicio && !isNaN(metaInicio) ? metaInicio : null);
 
     // amostra para guardar (no máximo ~1500 pontos)
     const passo = Math.max(1, Math.ceil(pts.length / 1500));
@@ -61,7 +134,8 @@
     if (amostra[amostra.length - 1] !== pts.length - 1) amostra.push(pts.length - 1);
 
     return {
-      nome: nomeEl ? nomeEl.textContent.trim().slice(0, 120) : "",
+      nome: String(nome || "").trim().slice(0, 120),
+      ini: [pts[0].la, pts[0].lo],
       inicio, duracao_s: duracao,
       km: Math.round(d / 10) / 100,
       dplus: Math.round(sobe), dminus: Math.round(desce),
@@ -124,5 +198,5 @@
     return svg;
   }
 
-  window.DorsalGPX = { ler, codificar, descodificar, perfilSVG, dist };
+  window.DorsalGPX = { ler, lerFicheiro, lerFIT, codificar, descodificar, perfilSVG, dist };
 })();

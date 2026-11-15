@@ -629,3 +629,17 @@ body.modo-seguir>*:not(#seguir):not(#toast){display:none !important}
 .prazoform{display:flex;flex-direction:column;gap:8px;margin:10px 0;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--card,#fff)}
 .prazoform .row{flex-wrap:wrap;gap:8px}.prazoform input[type=text]{flex:1;min-width:160px}
 @media (prefers-color-scheme:dark){.prazo{color:#ffd58a;background:#3a2c10}.prazo.urg{color:#fff;background:var(--accent)}}
+/* importar do relógio */
+.impov{position:fixed;inset:0;z-index:90;background:rgba(10,15,12,.55);display:flex;align-items:flex-end;justify-content:center}
+.impbox{background:var(--bg,#eef1ec);color:inherit;width:100%;max-width:560px;max-height:92dvh;overflow:auto;border-radius:20px 20px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px;box-shadow:0 -8px 30px rgba(0,0,0,.25)}
+@media (min-width:640px){.impov{align-items:center}.impbox{border-radius:20px}}
+.impbox h2{margin:0;font-size:1.2rem}
+.impres{margin:0;font-weight:600}
+.impq{margin:6px 0 0;font-weight:700}
+.impcand{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--card,#fff);color:inherit;font:inherit;cursor:pointer}
+.impcand.top{border:2px solid var(--accent)}
+.impcand span{font-size:.85rem;opacity:.75}
+.fizcard{margin:0 0 14px;padding:14px;border-radius:16px;background:var(--card,#fff);border:2px solid var(--accent);display:flex;flex-direction:column;gap:6px}
+.fizcard p{margin:0}
+.historico>.row.between .row{gap:6px;flex-wrap:wrap;justify-content:flex-end}
+@media (prefers-color-scheme:dark){.impbox{background:#141b16}}
