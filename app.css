@@ -643,3 +643,6 @@ body.modo-seguir>*:not(#seguir):not(#toast){display:none !important}
 .fizcard p{margin:0}
 .historico>.row.between .row{gap:6px;flex-wrap:wrap;justify-content:flex-end}
 @media (prefers-color-scheme:dark){.impbox{background:#141b16}}
+.fizinline{margin-top:10px;padding:10px 12px;border-radius:12px;border:2px solid var(--accent);display:flex;flex-direction:column;gap:6px}
+.fizinline p{margin:0}.fizinline .row{gap:8px}
+.fizinline.feito,.fizcard.feito{border-color:#3fbf6f;flex-direction:row;align-items:center;justify-content:space-between;flex-wrap:wrap}

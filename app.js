@@ -361,14 +361,20 @@ let fizPasso={};
 function fizCartao(){if(!me||!grupo||!podeMarcar())return null;const est=fizEstado();
   const p=[...passadas,...provas.filter(p=>p.data===hojeISO())].filter(p=>{const d=diasAte(p.data);if(!jaPassou(p)||d<-10)return false;const e=pres[p.id]&&pres[p.id][me];if(e!=="inscrito"&&e!=="vou")return false;
     const x=exDe(p.id,me);if(temTrilho.has(p.id+"|"+me))return false;if(est[p.id]==="nao"||est[p.id]==="ok")return false;if(est[p.id]==="sim"&&(x.tempo||x.km))return false;return true}).sort((a,b)=>b.data<a.data?-1:1)[0];
-  if(!p)return null;const tr=eTreino(p),d=parseD(p.data),quando=diasAte(p.data)===0?"hoje":diasAte(p.data)===-1?"ontem":DIAS[d.getDay()].toLowerCase()+", "+d.getDate()+" "+MESES[d.getMonth()].slice(0,3);
-  const passo=fizPasso[p.id]||(est[p.id]==="sim"?"gpx":"pergunta");
-  if(passo==="pergunta")return h("div",{class:"fizcard"},h("strong",{text:"🏁 Fizeste "+(tr?"o treino ":"o ")+p.nome+"?"}),h("p",{class:"hint",text:"Foi "+quando+". Confirma para entrar nos teus totais."}),
+  if(!p)return null;return fizBloco(p,"fizcard")}
+function fizBloco(p,cls){const est=fizEstado(),e=pres[p.id]&&pres[p.id][me],x=exDe(p.id,me),comTrilho=temTrilho.has(p.id+"|"+me);
+  if(e!=="inscrito"&&e!=="vou")return null;
+  const tr=eTreino(p),d=parseD(p.data),quando=diasAte(p.data)===0?"hoje":diasAte(p.data)===-1?"ontem":DIAS[d.getDay()].toLowerCase()+", "+d.getDate()+" "+MESES[d.getMonth()].slice(0,3);
+  const feito=est[p.id]==="sim"||est[p.id]==="ok"||comTrilho||x.tempo||x.km;
+  if(feito&&(comTrilho||est[p.id]==="ok"||(x.tempo&&x.km)))return h("div",{class:cls+" feito"},h("strong",{text:"✓ Fizeste"+(x.tempo?" em "+x.tempo:"")+(x.km?" · "+String(x.km).replace(".",",")+" km":"")}),
+    comTrilho?null:h("button",{class:"linkbtn",type:"button",onclick:()=>escolherFicheiro(f=>importarDoRelogio(f,p.id)),text:"⌚ Juntar o trilho do relógio"}));
+  const passo=fizPasso[p.id]||(feito?"gpx":"pergunta");
+  if(passo==="pergunta")return h("div",{class:cls},h("strong",{text:"🏁 Fizeste "+(tr?"o treino ":"o ")+p.nome+"?"}),h("p",{class:"hint",text:"Foi "+quando+". Confirma para entrar nos teus totais."}),
     h("div",{class:"row wrap"},h("button",{class:"btn primary small",type:"button",onclick:()=>{marcaFiz(p.id,"sim");fizPasso[p.id]="gpx";draw()},text:"Sim, fiz"}),
       h("button",{class:"btn small",type:"button",onclick:async e=>{const b=e.currentTarget;if(b.dataset.c!=="1"){b.dataset.c="1";b.textContent="Confirmar: não fui";return}
         try{await api("presencas?membro_id=eq."+me+"&prova_id=eq."+encodeURIComponent(p.id),{method:"DELETE"});marcaFiz(p.id,"nao");toast("Tirada da tua lista");await carregar()}catch(_){toast("Não foi possível. Tenta outra vez.")}},text:"Não fui"}),
       h("button",{class:"linkbtn",type:"button",onclick:()=>{marcaFiz(p.id,"ok");draw()},text:"Agora não"})));
-  return h("div",{class:"fizcard"},h("strong",{text:"💪 Boa! Queres juntar o trilho do relógio?"}),h("p",{class:"hint",text:"Carrega o GPX, FIT ou TCX da Zepp, do relógio ou do Strava: a app preenche km, D+ e tempo e mostra o percurso ao grupo."}),
+  return h("div",{class:cls},h("strong",{text:"💪 Boa! Queres juntar o trilho do relógio?"}),h("p",{class:"hint",text:"Carrega o GPX, FIT ou TCX da Zepp, do relógio ou do Strava: a app preenche km, D+ e tempo e mostra o percurso ao grupo."}),
     h("div",{class:"row wrap"},h("button",{class:"btn primary small",type:"button",onclick:()=>escolherFicheiro(f=>importarDoRelogio(f,p.id)),text:"Carregar ficheiro"}),
       h("button",{class:"btn small",type:"button",onclick:()=>{marcaFiz(p.id,"ok");editHist=p.id;histTodas=true;draw();setTimeout(()=>{const f=document.querySelector(".editfeita");f&&f.scrollIntoView({behavior:"smooth",block:"center"})},80)},text:"Só o tempo"}),
       h("button",{class:"linkbtn",type:"button",onclick:()=>{marcaFiz(p.id,"ok");draw()},text:"Agora não"})))}
@@ -1186,7 +1192,7 @@ async function remover(pid){if(confirmDel!==pid){confirmDel=pid;draw();return}co
   try{await api("provas?id=eq."+encodeURIComponent(pid),{method:"DELETE"});provas=provas.filter(p=>p.id!==pid);draw();toast("Prova removida")}catch(e){toast("Não foi possível remover.")}}
 
 // ---------- desenho ----------
-function segDe(p){const mine=pres[p.id]&&pres[p.id][me];return podeMarcar()?h("div",{class:"seg",role:"group","aria-label":"A tua presença"},...ESTADOS.filter(([k])=>!(eTreino(p)&&k==="inscrito")).map(([k,l])=>h("button",{class:k,"aria-pressed":String(mine===k),onclick:()=>setEstado(p.id,k),text:l}))):null}
+function segDe(p){const mine=pres[p.id]&&pres[p.id][me];if(podeMarcar()&&jaPassou(p))return fizBloco(p,"fizinline");return podeMarcar()?h("div",{class:"seg",role:"group","aria-label":"A tua presença"},...ESTADOS.filter(([k])=>!(eTreino(p)&&k==="inscrito")).map(([k,l])=>h("button",{class:k,"aria-pressed":String(mine===k),onclick:()=>setEstado(p.id,k),text:l}))):null}
 function msgDe(p){if(openMsg!==p.id)return null;const txt=mensagem(p),ta=h("textarea",{readonly:true,"aria-label":"Mensagem para o WhatsApp"});ta.value=txt;
   return h("div",{class:"msg"},ta,h("div",{class:"row"},h("button",{class:"btn primary small",onclick:()=>copiar(txt,ta),text:"Copiar"}),h("a",{class:"btn small",href:"https://wa.me/?text="+encodeURIComponent(txt),target:"_blank",rel:"noopener",text:"Abrir no WhatsApp"})))}
 function contagem(q){const parts=[];if(q.inscrito.length)parts.push(q.inscrito.length+(q.inscrito.length===1?" inscrito":" inscritos"));if(q.vou.length)parts.push(q.vou.length+(q.vou.length===1?" vai":" vão"));if(q.talvez.length)parts.push(q.talvez.length+" talvez");return parts.join(" · ")}
@@ -1206,7 +1212,7 @@ function card(p){const d=parseD(p.data),q=quem(p.id);
     h("div",{class:"bib",role:"button",tabindex:"0","aria-label":dataLonga(p.data)+". Abrir "+p.nome,onclick:()=>abrir(p.id)},h("div",{class:"d",text:d.getDate()}),h("div",{class:"m",text:MESES[d.getMonth()].slice(0,3)}),h("div",{class:"w",text:DIAS[d.getDay()]})),
     h("div",{class:"info"},tr?h("span",{class:"tagtreino",text:"Treino do grupo"+(p.hora?" · "+p.hora:"")}):null,h("h3",null,h("button",{class:"titlebtn",onclick:()=>abrir(p.id),text:p.nome})),
       tr&&p.nota?h("div",{class:"ponto",text:"📍 "+p.nota}):null,
-      h("div",{class:"meta"},h("strong",{text:[p.concelho,p.distrito].filter(Boolean).join(", ")||"Local por confirmar"}),"  ·  ",h("span",{class:dias<=7?"cd urg":"cd",text:faltam(p.data)}),(kmAte(p)!=null?"  ·  ≈ "+Math.round(kmAte(p))+" km de casa":"")+(p.nota&&!tr?"  ·  "+p.nota:"")),
+      h("div",{class:"meta"},h("strong",{text:[p.concelho,p.distrito].filter(Boolean).join(", ")||"Local por confirmar"}),"  ·  ",h("span",{class:dias<=7?"cd urg":"cd",text:jaPassou(p)&&diasAte(p.data)===0?"foi hoje":faltam(p.data)}),(kmAte(p)!=null?"  ·  ≈ "+Math.round(kmAte(p))+" km de casa":"")+(p.nota&&!tr?"  ·  "+p.nota:"")),
       prazoBadge(p),
       p.distancias?(()=>{const t=String(p.distancias).split(",").map(s=>s.trim()).filter(Boolean),M=t.length>3?2:3;return h("div",{class:"dist"},...t.slice(0,M).map(s=>h("span",{text:s})),t.length>M?h("span",{class:"mais",title:t.slice(M).join(", "),text:"+"+(t.length-M)}):null)})():null,
       people.childNodes.length?people:null,h("div",{class:"accao"},seg,links),
