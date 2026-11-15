@@ -353,13 +353,15 @@ async function importarDoRelogio(file,pidSug){try{const g=await DorsalGPX.lerFic
 function escolherFicheiro(cb){const i=h("input",{type:"file",class:"vh"});i.addEventListener("change",()=>{const f=i.files[0];i.remove();if(f)cb(f)});document.body.append(i);i.click()}
 
 // "Fizeste a prova?" nos dias a seguir a uma prova em que estavas marcado
+// Uma prova de hoje conta como passada a partir das 14h (ou 3h depois da hora marcada).
+function jaPassou(p){const d=diasAte(p.data);if(d<0)return true;if(d>0)return false;const n=new Date(),m=n.getHours()*60+n.getMinutes();const hm=/^(\d{2}):(\d{2})$/.exec(p.hora||"");return m>=(hm?Math.min(+hm[1]*60+ +hm[2]+180,23*60):14*60)}
 function fizEstado(){try{return JSON.parse(store.get("dorsal.fiz."+grupo)||"{}")}catch(_){return {}}}
 function marcaFiz(pid,v){const o=fizEstado();o[pid]=v;store.set("dorsal.fiz."+grupo,JSON.stringify(o))}
 let fizPasso={};
 function fizCartao(){if(!me||!grupo||!podeMarcar())return null;const est=fizEstado();
-  const p=passadas.filter(p=>{const d=diasAte(p.data);if(d>=0||d<-10)return false;const e=pres[p.id]&&pres[p.id][me];if(e!=="inscrito"&&e!=="vou")return false;
+  const p=[...passadas,...provas.filter(p=>p.data===hojeISO())].filter(p=>{const d=diasAte(p.data);if(!jaPassou(p)||d<-10)return false;const e=pres[p.id]&&pres[p.id][me];if(e!=="inscrito"&&e!=="vou")return false;
     const x=exDe(p.id,me);if(temTrilho.has(p.id+"|"+me))return false;if(est[p.id]==="nao"||est[p.id]==="ok")return false;if(est[p.id]==="sim"&&(x.tempo||x.km))return false;return true}).sort((a,b)=>b.data<a.data?-1:1)[0];
-  if(!p)return null;const tr=eTreino(p),d=parseD(p.data),quando=diasAte(p.data)===-1?"ontem":DIAS[d.getDay()].toLowerCase()+", "+d.getDate()+" "+MESES[d.getMonth()].slice(0,3);
+  if(!p)return null;const tr=eTreino(p),d=parseD(p.data),quando=diasAte(p.data)===0?"hoje":diasAte(p.data)===-1?"ontem":DIAS[d.getDay()].toLowerCase()+", "+d.getDate()+" "+MESES[d.getMonth()].slice(0,3);
   const passo=fizPasso[p.id]||(est[p.id]==="sim"?"gpx":"pergunta");
   if(passo==="pergunta")return h("div",{class:"fizcard"},h("strong",{text:"🏁 Fizeste "+(tr?"o treino ":"o ")+p.nome+"?"}),h("p",{class:"hint",text:"Foi "+quando+". Confirma para entrar nos teus totais."}),
     h("div",{class:"row wrap"},h("button",{class:"btn primary small",type:"button",onclick:()=>{marcaFiz(p.id,"sim");fizPasso[p.id]="gpx";draw()},text:"Sim, fiz"}),
@@ -1302,7 +1304,7 @@ function draw(){
   const fut=futuras();const grp=fut.filter(p=>temGente(p.id)||(eTreino(p)&&p.grupo===grupo));
   $("nGrupo").textContent=loaded&&grp.length?grp.length:"";$("nTodas").textContent="";
   if(!loaded){$("view-grupo").replaceChildren(h("div",{class:"empty",text:"A carregar as provas…"}));return}
-  const minhas=me?fut.filter(p=>pres[p.id]&&(pres[p.id][me]==="inscrito"||pres[p.id][me]==="vou")):[];
+  const minhas=me?fut.filter(p=>!jaPassou(p)&&pres[p.id]&&(pres[p.id][me]==="inscrito"||pres[p.id][me]==="vou")):[];
   const banner=minhas.length?(()=>{const p=minhas[0],e=pres[p.id][me],x=exDe(p.id,me);return h("button",{type:"button",class:"proxima",onclick:()=>abrir(p.id)},
     h("span",{class:"k",text:eTreino(p)?"O teu próximo treino":"A tua próxima prova"}),h("span",{class:"t",text:p.nome}),h("span",{class:"s",text:dataLonga(p.data)+(p.hora?" às "+p.hora:"")+" · "+faltam(p.data)+(eTreino(p)?(p.nota?" · "+p.nota:""):" · "+(e==="inscrito"?"inscrito":"ainda sem inscrição"))+(x.percurso?" · "+x.percurso:"")}),
     ...(()=>{const outros=Object.keys(pres[p.id]||{}).filter(id=>id!==me&&foiA(p.id,id)).map(nomeDe);const dias=Math.round((parseD(p.data)-hoje())/864e5);
