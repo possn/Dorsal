@@ -1,0 +1,37 @@
+{
+ "gerado_em": "2026-11-16T13:10:05Z",
+ "recolhidas": 279,
+ "unicas": 155,
+ "existentes": 157,
+ "novas": [
+  {
+   "id": "algarve-xtreme-trail-2027-01-31",
+   "nome": "Algarve Xtreme Trail",
+   "data": "2027-01-31",
+   "concelho": "Querença",
+   "distrito": "Faro",
+   "distancias": "Trail curto, Trail longo, Trail ultra",
+   "hora": "",
+   "info": "https://gotrail.run/pt/event/algarve-xtreme-trail",
+   "inscricao": "",
+   "fonte": "gotrail.run",
+   "nota": ""
+  }
+ ],
+ "completar": [],
+ "registo": [
+  "gotrail página 1: 20 provas de trail",
+  "gotrail página 2: 14 provas de trail",
+  "gotrail página 3: 20 provas de trail",
+  "gotrail página 4: 19 provas de trail",
+  "gotrail página 5: 20 provas de trail",
+  "gotrail página 6: 18 provas de trail",
+  "gotrail página 7: 17 provas de trail",
+  "gotrail página 8: 16 provas de trail",
+  "Trilho Perdido: 10 provas de trail em 16 eventos",
+  "Portugal Running: 2585 eventos no sitemap",
+  "Portugal Running: 50 páginas lidas (359 s)",
+  "Portugal Running: 100 páginas lidas (736 s)",
+  "Portugal Running: 136 provas futuras de trail (112 páginas lidas nesta corrida)"
+ ]
+}
