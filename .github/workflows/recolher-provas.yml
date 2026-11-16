@@ -1,7 +1,8 @@
 name: Recolher provas de trail
 on:
   schedule:
-    - cron: "23 4 * * 1"   # segundas, 04:23 UTC
+    - cron: "17 21 * * 0"  # domingos, 21:17 UTC (principal)
+    - cron: "23 4 * * 1"   # segundas, 04:23 UTC (reserva)
   workflow_dispatch:
 permissions:
   contents: write
