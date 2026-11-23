@@ -1,0 +1,39 @@
+{
+ "gerado_em": "2026-11-23T15:09:39Z",
+ "recolhidas": 268,
+ "unicas": 149,
+ "existentes": 151,
+ "novas": [
+  {
+   "id": "trail-pe-firme-2027-09-26",
+   "nome": "Trail Pé Firme",
+   "data": "2027-09-26",
+   "concelho": "Póvoa de Penafirme",
+   "distrito": "Lisboa",
+   "distancias": "",
+   "hora": "",
+   "info": "https://gotrail.run/pt/event/trail-pe-firme",
+   "inscricao": "",
+   "fonte": "gotrail.run",
+   "nota": ""
+  }
+ ],
+ "completar": [],
+ "registo": [
+  "gotrail página 1: 15 provas de trail",
+  "gotrail página 2: 20 provas de trail",
+  "gotrail página 3: 19 provas de trail",
+  "gotrail página 4: 19 provas de trail",
+  "gotrail página 5: 19 provas de trail",
+  "gotrail página 6: 19 provas de trail",
+  "gotrail página 7: 17 provas de trail",
+  "gotrail página 8: 10 provas de trail",
+  "Trilho Perdido: 11 provas de trail em 16 eventos",
+  "Portugal Running: 2598 eventos no sitemap",
+  "Portugal Running: 50 páginas lidas (166 s)",
+  "Portugal Running: 100 páginas lidas (339 s)",
+  "Portugal Running: 150 páginas lidas (513 s)",
+  "Portugal Running: 200 páginas lidas (718 s)",
+  "Portugal Running: 129 provas futuras de trail (236 páginas lidas nesta corrida)"
+ ]
+}
